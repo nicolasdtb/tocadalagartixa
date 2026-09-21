@@ -4,6 +4,10 @@ const { requireAuth } = require('../middlewares/auth');
 
 const router = express.Router();
 
+const LIMIAR_BENEFICIO_ESPECIAL = 2000;
+const VALOR_BENEFICIO_ESPECIAL = 250;
+const TOTAL_ISENCOES = 3;
+
 async function calcularRepasse(valor) {
   const result = await pool.query(
     `SELECT percentual FROM tocadalagartixa.faixas_repasse
@@ -17,6 +21,55 @@ async function calcularRepasse(valor) {
   const percentual = Number(result.rows[0].percentual);
   const repasse = (valor * percentual) / 100;
   return { percentual, repasse };
+}
+
+// Verifica se existe isenção disponível para o usuário, concedida no mês em que
+// o booking está sendo FECHADO agora (created_at), com saldo de uso disponível.
+async function buscarIsencaoDisponivel(usuarioId, mesFechamento) {
+  const result = await pool.query(
+    `SELECT id, usadas, total FROM tocadalagartixa.isencoes_repasse
+     WHERE usuario_id = $1 AND mes_concessao = $2 AND usadas < total
+     ORDER BY id LIMIT 1`,
+    [usuarioId, mesFechamento]
+  );
+  return result.rows[0] || null;
+}
+
+// Depois de gravar o repasse de um agendamento, verifica se o acumulado do mês
+// de competência cruzou R$2.000 pela primeira vez nesse mês; se sim, concede
+// benefício especial de R$250 + 3 isenções, com concessão registrada no mês
+// de FECHAMENTO (agora), conforme regra do documento.
+async function verificarBeneficioEspecial(usuarioId, mesCompetencia) {
+  const acumuladoResult = await pool.query(
+    `SELECT COALESCE(SUM(repasse), 0) AS acumulado
+     FROM tocadalagartixa.agendamentos
+     WHERE usuario_id = $1 AND mes_competencia = $2`,
+    [usuarioId, mesCompetencia]
+  );
+  const acumulado = Number(acumuladoResult.rows[0].acumulado);
+
+  if (acumulado < LIMIAR_BENEFICIO_ESPECIAL) {
+    return null;
+  }
+
+  const mesFechamento = new Date().toISOString().slice(0, 7) + '-01';
+
+  // Já existe concessão nesse mês de fechamento? Não concede de novo.
+  const jaConcedido = await pool.query(
+    `SELECT id FROM tocadalagartixa.isencoes_repasse WHERE usuario_id = $1 AND mes_concessao = $2`,
+    [usuarioId, mesFechamento]
+  );
+  if (jaConcedido.rows.length > 0) {
+    return null;
+  }
+
+  const result = await pool.query(
+    `INSERT INTO tocadalagartixa.isencoes_repasse (usuario_id, mes_concessao, total, usadas, valor_beneficio)
+     VALUES ($1, $2, $3, 0, $4) RETURNING *`,
+    [usuarioId, mesFechamento, TOTAL_ISENCOES, VALOR_BENEFICIO_ESPECIAL]
+  );
+
+  return result.rows[0];
 }
 
 // Criar agendamento — residente cria só o próprio; sócio pode criar de qualquer um
@@ -34,8 +87,18 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   try {
-    const { percentual, repasse } = await calcularRepasse(Number(valor));
-    const mesCompetencia = `${data.slice(0, 7)}-01`; // primeiro dia do mês da data
+    const mesCompetencia = `${data.slice(0, 7)}-01`;
+    const mesFechamento = new Date().toISOString().slice(0, 7) + '-01';
+
+    const isencao = await buscarIsencaoDisponivel(alvoUsuarioId, mesFechamento);
+
+    let percentual, repasse;
+    if (isencao) {
+      percentual = 0;
+      repasse = 0;
+    } else {
+      ({ percentual, repasse } = await calcularRepasse(Number(valor)));
+    }
 
     const result = await pool.query(
       `INSERT INTO tocadalagartixa.agendamentos
@@ -45,7 +108,24 @@ router.post('/', requireAuth, async (req, res) => {
       [alvoUsuarioId, data, horario, duracao || null, valor, percentual, repasse, mesCompetencia]
     );
 
-    res.status(201).json(result.rows[0]);
+    const agendamento = result.rows[0];
+
+    if (isencao) {
+      await pool.query(
+        `UPDATE tocadalagartixa.isencoes_repasse SET usadas = usadas + 1 WHERE id = $1`,
+        [isencao.id]
+      );
+      await pool.query(
+        `INSERT INTO tocadalagartixa.isencoes_uso (isencao_id, agendamento_id) VALUES ($1, $2)`,
+        [isencao.id, agendamento.id]
+      );
+    } else {
+      // Isenção só é verificada quando o repasse é normal (evita disparar de novo
+      // usando um repasse já zerado por isenção).
+      await verificarBeneficioEspecial(alvoUsuarioId, mesCompetencia);
+    }
+
+    res.status(201).json({ ...agendamento, isencao_aplicada: !!isencao });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ erro: 'Já existe um agendamento desse residente nesse mesmo horário' });
