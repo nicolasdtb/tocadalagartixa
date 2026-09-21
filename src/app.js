@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const usuariosRoutes = require('./routes/usuarios');
 const primeiroAcessoRoutes = require('./routes/primeiroAcesso');
 const agendamentosRoutes = require('./routes/agendamentos');
+const metasRoutes = require('./routes/metas');
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/primeiro-acesso', primeiroAcessoRoutes);
 app.use('/api/agendamentos', agendamentosRoutes);
+app.use('/api/metas', metasRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {
