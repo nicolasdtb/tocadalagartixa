@@ -5,6 +5,7 @@ const pgSession = require('connect-pg-simple')(session);
 const pool = require('./db');
 const authRoutes = require('./routes/auth');
 const usuariosRoutes = require('./routes/usuarios');
+const primeiroAcessoRoutes = require('./routes/primeiroAcesso');
 
 const app = express();
 
@@ -28,8 +29,11 @@ app.use(session({
   },
 }));
 
+app.use(require('./middlewares/auth').requirePrimeiroAcessoConcluido);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/primeiro-acesso', primeiroAcessoRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {

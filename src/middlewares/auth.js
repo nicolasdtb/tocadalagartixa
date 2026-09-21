@@ -12,4 +12,18 @@ function requireSocio(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireSocio };
+const ROTAS_LIVRES_DE_PRIMEIRO_ACESSO = ['/api/auth', '/api/primeiro-acesso', '/api/health'];
+
+function requirePrimeiroAcessoConcluido(req, res, next) {
+  const rotaLivre = ROTAS_LIVRES_DE_PRIMEIRO_ACESSO.some((prefixo) => req.path.startsWith(prefixo));
+  if (rotaLivre) {
+    return next();
+  }
+
+  if (req.session.usuario && req.session.usuario.primeiro_acesso === false) {
+    return res.status(428).json({ erro: 'Cadastro inicial pendente. Complete o primeiro acesso antes de continuar.' });
+  }
+  next();
+}
+
+module.exports = { requireAuth, requireSocio, requirePrimeiroAcessoConcluido };

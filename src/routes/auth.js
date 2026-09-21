@@ -35,6 +35,7 @@ router.post('/login', async (req, res) => {
       id: usuario.id,
       nome: usuario.nome,
       perfil_id: usuario.perfil_id,
+      primeiro_acesso: usuario.primeiro_acesso,
     };
 
     res.json({
