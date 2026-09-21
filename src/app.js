@@ -3,6 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const pool = require('./db');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 
@@ -20,13 +21,14 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias, conforme regra de negócio
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    secure: false, // true quando estiver atrás de HTTPS (Tailscale Funnel já entrega HTTPS na borda)
+    secure: false,
   },
 }));
 
-// Rota de teste — confirma que o servidor e o banco estão de pé
+app.use('/api/auth', authRoutes);
+
 app.get('/api/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
