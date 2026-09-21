@@ -6,6 +6,7 @@ const pool = require('./db');
 const authRoutes = require('./routes/auth');
 const usuariosRoutes = require('./routes/usuarios');
 const primeiroAcessoRoutes = require('./routes/primeiroAcesso');
+const agendamentosRoutes = require('./routes/agendamentos');
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use(require('./middlewares/auth').requirePrimeiroAcessoConcluido);
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/primeiro-acesso', primeiroAcessoRoutes);
+app.use('/api/agendamentos', agendamentosRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {
