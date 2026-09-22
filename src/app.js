@@ -10,6 +10,7 @@ const agendamentosRoutes = require('./routes/agendamentos');
 const metasRoutes = require('./routes/metas');
 const beneficiosRoutes = require('./routes/beneficios');
 const estoqueRoutes = require('./routes/estoque');
+const financeiroRoutes = require('./routes/financeiro');
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use('/api/agendamentos', agendamentosRoutes);
 app.use('/api/metas', metasRoutes);
 app.use('/api/beneficios', beneficiosRoutes);
 app.use('/api/estoque', estoqueRoutes);
+app.use('/api/financeiro', financeiroRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {
