@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { requireSocio } = require('../middlewares/auth');
+const { registrar } = require('../utils/auditoria');
 
 const router = express.Router();
 
@@ -39,6 +40,10 @@ router.post('/entradas', requireSocio, async (req, res) => {
        VALUES (NULL, 1, $1, $2, $3, $4) RETURNING *`,
       [valor, mesCompetencia, req.session.usuario.id, descricao || null]
     );
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'financeiro', acao: 'entrada',
+      entidade: 'lancamentos_financeiros', entidadeId: result.rows[0].id, depois: result.rows[0],
+    });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -102,6 +107,10 @@ router.post('/gastos', requireSocio, async (req, res) => {
        VALUES ($1, 2, $2, $3, $4, $5) RETURNING *`,
       [categoria_id, valor, mesCompetencia, req.session.usuario.id, descricao || null]
     );
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'financeiro', acao: 'gasto',
+      entidade: 'lancamentos_financeiros', entidadeId: result.rows[0].id, depois: result.rows[0],
+    });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);

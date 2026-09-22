@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const pool = require('../db');
 const { requireSocio } = require('../middlewares/auth');
 const { gerarLoginGenerico, gerarSenhaProvisoria } = require('../utils/credenciais');
+const { registrar } = require('../utils/auditoria');
 
 const router = express.Router();
 
@@ -33,6 +34,10 @@ router.post('/', requireSocio, async (req, res) => {
 
     // Credenciais em texto puro só aparecem aqui, nesta resposta única —
     // depois disso, a senha real nunca mais é recuperável (só re-hash).
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'usuarios', acao: 'criacao',
+      entidade: 'usuarios', entidadeId: result.rows[0].id, depois: result.rows[0],
+    });
     res.status(201).json({
       usuario: result.rows[0],
       credenciais_iniciais: {
@@ -74,15 +79,22 @@ router.patch('/:id/status', requireSocio, async (req, res) => {
   }
 
   try {
+    const antesResult = await pool.query('SELECT status FROM tocadalagartixa.usuarios WHERE id = $1', [id]);
+    if (antesResult.rows.length === 0) {
+      return res.status(404).json({ erro: 'Usuário não encontrado' });
+    }
+
     const result = await pool.query(
       `UPDATE tocadalagartixa.usuarios SET status = $1, updated_at = now()
        WHERE id = $2 RETURNING id, nome, login, status`,
       [status, id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ erro: 'Usuário não encontrado' });
-    }
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'usuarios',
+      acao: status ? 'ativacao' : 'desativacao',
+      entidade: 'usuarios', entidadeId: id, antes: antesResult.rows[0], depois: result.rows[0],
+    });
 
     res.json({ mensagem: status ? 'Usuário ativado' : 'Usuário desativado', usuario: result.rows[0] });
   } catch (err) {
@@ -101,15 +113,21 @@ router.patch('/:id/perfil', requireSocio, async (req, res) => {
   }
 
   try {
+    const antesResult = await pool.query('SELECT perfil_id FROM tocadalagartixa.usuarios WHERE id = $1', [id]);
+    if (antesResult.rows.length === 0) {
+      return res.status(404).json({ erro: 'Usuário não encontrado' });
+    }
+
     const result = await pool.query(
       `UPDATE tocadalagartixa.usuarios SET perfil_id = $1, updated_at = now()
        WHERE id = $2 RETURNING id, nome, login, perfil_id`,
       [perfil_id, id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ erro: 'Usuário não encontrado' });
-    }
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'usuarios', acao: 'alteracao_perfil',
+      entidade: 'usuarios', entidadeId: id, antes: antesResult.rows[0], depois: result.rows[0],
+    });
 
     res.json({ mensagem: 'Perfil alterado', usuario: result.rows[0] });
   } catch (err) {
@@ -136,6 +154,11 @@ router.post('/:id/redefinir-senha', requireSocio, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ erro: 'Usuário não encontrado' });
     }
+
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'usuarios', acao: 'redefinicao_senha',
+      entidade: 'usuarios', entidadeId: id,
+    });
 
     res.json({
       mensagem: 'Senha redefinida. Usuário precisará trocá-la no próximo login.',

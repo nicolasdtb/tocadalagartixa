@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { requireAuth, requireSocio } = require('../middlewares/auth');
+const { registrar } = require('../utils/auditoria');
 
 const router = express.Router();
 const CATEGORIA_MELHORIAS = 5;
@@ -46,6 +47,10 @@ router.post('/', requireSocio, async (req, res) => {
        VALUES ($1, $2, $3, 1) RETURNING *`,
       [nome, valor_alvo, prioridade]
     );
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'melhorias', acao: 'criacao',
+      entidade: 'melhorias', entidadeId: result.rows[0].id, depois: result.rows[0],
+    });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -78,11 +83,17 @@ router.patch('/:id/prioridade', requireSocio, async (req, res) => {
     return res.status(400).json({ erro: 'Campo obrigatório: prioridade' });
   }
   try {
+    const antesResult = await pool.query('SELECT prioridade FROM tocadalagartixa.melhorias WHERE id = $1', [id]);
+    if (antesResult.rows.length === 0) return res.status(404).json({ erro: 'Melhoria não encontrada' });
+
     const result = await pool.query(
       `UPDATE tocadalagartixa.melhorias SET prioridade = $1 WHERE id = $2 RETURNING *`,
       [prioridade, id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ erro: 'Melhoria não encontrada' });
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'melhorias', acao: 'alteracao_prioridade',
+      entidade: 'melhorias', entidadeId: id, antes: antesResult.rows[0], depois: result.rows[0],
+    });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);

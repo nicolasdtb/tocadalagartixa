@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { requireAuth, requireSocio } = require('../middlewares/auth');
+const { registrar } = require('../utils/auditoria');
 
 const router = express.Router();
 
@@ -16,6 +17,10 @@ router.post('/materiais', requireSocio, async (req, res) => {
        VALUES ($1, $2, 0, $3, true) RETURNING *`,
       [nome, unidade, minimo || 0]
     );
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'estoque', acao: 'cadastro_material',
+      entidade: 'materiais', entidadeId: result.rows[0].id, depois: result.rows[0],
+    });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -49,13 +54,19 @@ router.patch('/materiais/:id/status', requireSocio, async (req, res) => {
     return res.status(400).json({ erro: 'Campo "status" deve ser true ou false' });
   }
   try {
+    const antesResult = await pool.query('SELECT * FROM tocadalagartixa.materiais WHERE id = $1', [id]);
+    if (antesResult.rows.length === 0) {
+      return res.status(404).json({ erro: 'Material não encontrado' });
+    }
     const result = await pool.query(
       `UPDATE tocadalagartixa.materiais SET status = $1 WHERE id = $2 RETURNING *`,
       [status, id]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ erro: 'Material não encontrado' });
-    }
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: 'estoque',
+      acao: status ? 'ativacao_material' : 'desativacao_material',
+      entidade: 'materiais', entidadeId: id, antes: antesResult.rows[0], depois: result.rows[0],
+    });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -117,6 +128,14 @@ router.post('/movimentacoes', requireAuth, async (req, res) => {
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [material_id, tipo_id, quantidade, usuarioId, observacao || null]
     );
+
+    if (Number(tipo_id) === 1) {
+      await client.query(
+        `INSERT INTO tocadalagartixa.auditoria (usuario_id, modulo, acao, entidade, entidade_id, depois)
+         VALUES ($1, 'estoque', 'entrada_estoque', 'movimentacoes_estoque', $2, $3)`,
+        [usuarioId, movResult.rows[0].id, JSON.stringify(movResult.rows[0])]
+      );
+    }
 
     await client.query('COMMIT');
     res.status(201).json({ movimentacao: movResult.rows[0], quantidade_atual: novaQuantidade });
