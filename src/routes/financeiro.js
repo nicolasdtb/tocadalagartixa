@@ -286,4 +286,36 @@ router.get('/saldos/:mes', requireSocio, async (req, res) => {
   }
 });
 
+// Consulta de período maior — resumo consolidado por categoria entre dois meses (inclusive)
+// Ex.: /api/financeiro/saldos-periodo?inicio=2026-01&fim=2026-12
+router.get('/saldos-periodo', requireSocio, async (req, res) => {
+  const { inicio, fim } = req.query;
+  if (!inicio || !fim) {
+    return res.status(400).json({ erro: 'Parâmetros obrigatórios: inicio, fim (formato AAAA-MM)' });
+  }
+  const mesInicio = primeiroDiaMes(inicio);
+  const mesFim = primeiroDiaMes(fim);
+
+  try {
+    const result = await pool.query(
+      `SELECT c.nome,
+              COALESCE(SUM(s.destinacao), 0) AS total_entradas,
+              COALESCE(SUM(s.gastos), 0) AS total_saidas,
+              (SELECT saldo_final FROM tocadalagartixa.saldos_mensais
+                WHERE categoria_id = c.id AND mes <= $2
+                ORDER BY mes DESC LIMIT 1) AS saldo_final_periodo
+       FROM tocadalagartixa.categorias_financeiras c
+       LEFT JOIN tocadalagartixa.saldos_mensais s
+         ON s.categoria_id = c.id AND s.mes BETWEEN $1 AND $2
+       GROUP BY c.id, c.nome
+       ORDER BY c.id`,
+      [mesInicio, mesFim]
+    );
+    res.json({ periodo: { inicio: mesInicio, fim: mesFim }, categorias: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao consultar saldos do período' });
+  }
+});
+
 module.exports = router;
