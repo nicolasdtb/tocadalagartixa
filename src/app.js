@@ -12,6 +12,7 @@ const beneficiosRoutes = require('./routes/beneficios');
 const estoqueRoutes = require('./routes/estoque');
 const financeiroRoutes = require('./routes/financeiro');
 const melhoriasRoutes = require('./routes/melhorias');
+const comunicadosRoutes = require('./routes/comunicados');
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use('/api/beneficios', beneficiosRoutes);
 app.use('/api/estoque', estoqueRoutes);
 app.use('/api/financeiro', financeiroRoutes);
 app.use('/api/melhorias', melhoriasRoutes);
+app.use('/api/comunicados', comunicadosRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {
