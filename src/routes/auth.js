@@ -43,6 +43,7 @@ router.post('/login', async (req, res) => {
       nome: usuario.nome,
       perfil_id: usuario.perfil_id,
       primeiro_acesso: usuario.primeiro_acesso,
+      senha_provisoria: usuario.senha_provisoria,
     });
   } catch (err) {
     console.error(err);
@@ -56,11 +57,23 @@ router.post('/logout', (req, res) => {
   });
 });
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   if (!req.session.usuario) {
     return res.status(401).json({ erro: 'Não autenticado' });
   }
-  res.json(req.session.usuario);
+  try {
+    const result = await pool.query(
+      'SELECT nome, perfil_id, primeiro_acesso, senha_provisoria FROM tocadalagartixa.usuarios WHERE id = $1',
+      [req.session.usuario.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ erro: 'Não autenticado' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao consultar sessão' });
+  }
 });
 
 module.exports = router;

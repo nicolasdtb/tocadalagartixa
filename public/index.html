@@ -1,1 +1,115 @@
-<h1>Toca da Lagartixa</h1>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toca da Lagartixa</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- TELA DE LOGIN -->
+  <div id="tela-login" class="tela-central">
+    <div class="cartao">
+      <div class="marca">
+        <h1>Toca da Lagartixa</h1>
+        <p>Acesso interno</p>
+      </div>
+      <div id="erro-login" class="mensagem-erro"></div>
+      <form id="form-login">
+        <div class="campo">
+          <label for="login-usuario">Usuário</label>
+          <input type="text" id="login-usuario" autocomplete="username" required>
+        </div>
+        <div class="campo">
+          <label for="login-senha">Senha</label>
+          <input type="password" id="login-senha" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="botao">Entrar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- TELA DE PRIMEIRO ACESSO -->
+  <div id="tela-primeiro-acesso" class="tela-central oculto">
+    <div class="cartao" style="max-width: 420px;">
+      <div class="marca">
+        <h1>Primeiro acesso</h1>
+        <p>Complete seu cadastro para continuar</p>
+      </div>
+      <div id="erro-primeiro-acesso" class="mensagem-erro"></div>
+      <form id="form-primeiro-acesso">
+        <div class="campo">
+          <label for="pa-nome">Nome completo</label>
+          <input type="text" id="pa-nome" required>
+        </div>
+        <div class="campo">
+          <label for="pa-email">E-mail</label>
+          <input type="email" id="pa-email" required>
+        </div>
+        <div class="campo">
+          <label for="pa-telefone">Telefone (só números)</label>
+          <input type="text" id="pa-telefone" required>
+        </div>
+        <div class="campo">
+          <label for="pa-cpf">CPF (só números)</label>
+          <input type="text" id="pa-cpf" required>
+        </div>
+        <div class="campo">
+          <label for="pa-novo-login">Novo usuário</label>
+          <input type="text" id="pa-novo-login" required>
+        </div>
+        <div class="campo">
+          <label for="pa-nova-senha">Nova senha (mín. 8 caracteres)</label>
+          <input type="password" id="pa-nova-senha" required minlength="8">
+        </div>
+        <button type="submit" class="botao">Concluir cadastro</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- TELA DE TROCA DE SENHA OBRIGATÓRIA -->
+  <div id="tela-trocar-senha" class="tela-central oculto">
+    <div class="cartao">
+      <div class="marca">
+        <h1>Nova senha</h1>
+        <p>Sua senha foi redefinida. Defina uma nova para continuar.</p>
+      </div>
+      <div id="erro-trocar-senha" class="mensagem-erro"></div>
+      <form id="form-trocar-senha">
+        <div class="campo">
+          <label for="ts-nova-senha">Nova senha (mín. 8 caracteres)</label>
+          <input type="password" id="ts-nova-senha" required minlength="8">
+        </div>
+        <button type="submit" class="botao">Salvar nova senha</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- SHELL DO DASHBOARD -->
+  <div id="app-shell" class="app-shell">
+    <nav class="barra-lateral">
+      <div class="marca-mini">Toca da Lagartixa</div>
+      <button class="nav-item ativo" data-view="inicio">Início</button>
+      <button class="nav-item" data-view="agenda">Agenda</button>
+      <button class="nav-item" data-view="metas">Minha Meta</button>
+      <button class="nav-item" data-view="beneficios">Benefícios</button>
+      <button class="nav-item" data-view="estoque">Estoque</button>
+      <button class="nav-item apenas-socio oculto" data-view="financeiro">Financeiro</button>
+      <button class="nav-item" data-view="melhorias">Melhorias</button>
+      <button class="nav-item" data-view="comunicados">Comunicados</button>
+      <button class="nav-item apenas-socio oculto" data-view="usuarios">Usuários</button>
+      <div class="rodape-usuario">
+        <div id="usuario-logado-nome"></div>
+        <button id="botao-logout">Sair</button>
+      </div>
+    </nav>
+    <main class="conteudo-principal" id="conteudo-principal">
+      <h2>Carregando...</h2>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
