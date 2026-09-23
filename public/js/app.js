@@ -315,6 +315,157 @@ const views = {
 
     renderTabela();
   },
+
+  async metas(container) {
+    container.innerHTML = '<h2>Minha Meta</h2><p>Carregando...</p>';
+    let meta;
+    try {
+      meta = await api.get('/metas/individual');
+    } catch (e) {
+      container.innerHTML = '<h2>Minha Meta</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+      return;
+    }
+
+    const progresso = meta.nivel_maximo_atingido
+      ? 100
+      : Math.min(100, (meta.acumulado_mes / Number(meta.proximo_nivel.repasse_minimo)) * 100);
+
+    container.innerHTML = `
+      <h2>Minha Meta <button class="link-acao" id="botao-ver-niveis" title="Ver todos os níveis">?</button></h2>
+      <div class="painel-form" style="max-width:480px;">
+        <p style="color:var(--cor-texto-fraco); margin-top:0;">Repasse acumulado este mês</p>
+        <p style="font-size:32px; font-family: var(--fonte-titulo); margin:0 0 16px;">R$ ${Number(meta.acumulado_mes).toFixed(2)}</p>
+
+        <div class="barra-progresso"><div class="barra-progresso-preenchida" style="width:${progresso}%"></div></div>
+
+        ${meta.nivel_maximo_atingido ? `
+          <p class="mensagem-sucesso" style="margin-top:16px;">Nível máximo atingido! Benefício: R$ ${Number(meta.nivel_atual.valor).toFixed(2)}</p>
+        ` : `
+          <p style="margin-top:16px; color:var(--cor-texto-fraco);">
+            ${meta.nivel_atual ? `Nível atual: <strong style="color:var(--cor-texto);">Nível ${meta.nivel_atual.nivel}</strong> (R$ ${Number(meta.nivel_atual.valor).toFixed(2)})<br>` : ''}
+            Faltam <strong style="color:var(--cor-texto);">R$ ${Number(meta.falta_para_proximo).toFixed(2)}</strong> para o Nível ${meta.proximo_nivel.nivel} (R$ ${Number(meta.proximo_nivel.valor).toFixed(2)})
+          </p>
+        `}
+      </div>
+
+      <div id="modal-niveis" class="modal oculto">
+        <div class="modal-conteudo">
+          <h3>Todos os níveis</h3>
+          <table class="tabela">
+            <thead><tr><th>Nível</th><th>Repasse mínimo</th><th>Benefício</th></tr></thead>
+            <tbody id="corpo-niveis"></tbody>
+          </table>
+          <button class="botao botao-secundario" id="botao-fechar-niveis">Fechar</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('botao-ver-niveis').addEventListener('click', async () => {
+      const niveis = await api.get('/metas/niveis');
+      document.getElementById('corpo-niveis').innerHTML = niveis.map((n) => `
+        <tr><td>${n.nivel}</td><td>R$ ${Number(n.repasse_minimo).toFixed(2)}</td><td>R$ ${Number(n.valor).toFixed(2)}</td></tr>
+      `).join('');
+      document.getElementById('modal-niveis').classList.remove('oculto');
+    });
+    document.getElementById('botao-fechar-niveis').addEventListener('click', () => {
+      document.getElementById('modal-niveis').classList.add('oculto');
+    });
+  },
+
+  async beneficios(container) {
+    container.innerHTML = '<h2>Benefícios</h2><p>Carregando...</p>';
+    const ehSocio = usuarioAtual.perfil_id === 1;
+
+    if (ehSocio) {
+      let resumo = [];
+      try {
+        resumo = await api.get('/beneficios/resumo');
+      } catch (e) {
+        container.innerHTML = '<h2>Benefícios</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+        return;
+      }
+      const nomesStatus = { 1: 'Pendente', 2: 'Aprovado', 3: 'Pago' };
+      container.innerHTML = `
+        <h2>Benefícios</h2>
+        <div class="tabela-wrapper">
+          <table class="tabela">
+            <thead><tr><th>Residente</th><th>Repasse acumulado</th><th>Benefício</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${resumo.map((r) => `
+                <tr>
+                  <td>${r.nome}</td>
+                  <td>R$ ${Number(r.repasse_acumulado).toFixed(2)}</td>
+                  <td>${r.valor_beneficio ? 'R$ ' + Number(r.valor_beneficio).toFixed(2) : '—'}</td>
+                  <td>${r.status_id ? nomesStatus[r.status_id] : '—'}</td>
+                  <td>
+                    ${r.status_id === 1 ? `<button class="link-acao" data-acao="aprovar" data-id="${r.beneficio_id}">Aprovar</button>` : ''}
+                    ${r.status_id === 2 ? `<button class="link-acao" data-acao="pagar" data-id="${r.beneficio_id}">Marcar como pago</button>` : ''}
+                  </td>
+                </tr>
+              `).join('') || '<tr><td colspan="5">Nenhum benefício este mês.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+      // Nota: as ações usam o id do benefício, não do usuário.
+      container.querySelectorAll('[data-acao="aprovar"], [data-acao="pagar"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const statusAlvo = btn.dataset.acao === 'aprovar' ? 2 : 3;
+          try {
+            await api.patch(`/beneficios/${btn.dataset.id}/status`, { status_id: statusAlvo });
+            views.beneficios(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao atualizar benefício');
+          }
+        });
+      });
+      return;
+    }
+
+    // Visão do residente
+    let categorias = [];
+    try {
+      categorias = await api.get('/beneficios/categorias');
+    } catch (e) {}
+
+    container.innerHTML = `
+      <h2>Benefícios</h2>
+      <div class="painel-form" style="max-width:420px;">
+        <p style="color:var(--cor-texto-fraco); margin-top:0;">Escolha a categoria do seu benefício deste mês. Só é possível uma solicitação por mês.</p>
+        <div id="erro-beneficio" class="mensagem-erro"></div>
+        <div id="sucesso-beneficio" class="mensagem-sucesso oculto"></div>
+        <form id="form-beneficio">
+          <div class="campo">
+            <label for="beneficio-categoria">Categoria</label>
+            <select id="beneficio-categoria" required>
+              <option value="">Selecione...</option>
+              ${categorias.map((c) => `<option value="${c.id}">${c.nome}</option>`).join('')}
+            </select>
+          </div>
+          <button type="submit" class="botao">Solicitar benefício do mês</button>
+        </form>
+      </div>
+    `;
+
+    document.getElementById('form-beneficio').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-beneficio');
+      const sucessoEl = document.getElementById('sucesso-beneficio');
+      erroEl.classList.remove('visivel');
+      sucessoEl.classList.add('oculto');
+
+      const categoria_id = document.getElementById('beneficio-categoria').value;
+      try {
+        const resultado = await api.post('/beneficios/solicitar', { categoria_id });
+        sucessoEl.textContent = `Benefício solicitado: R$ ${Number(resultado.valor).toFixed(2)}. Aguarde aprovação do sócio.`;
+        sucessoEl.classList.remove('oculto');
+        document.getElementById('form-beneficio').reset();
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao solicitar benefício';
+        erroEl.classList.add('visivel');
+      }
+    });
+  },
 };
 
 // ---------- VERIFICAÇÃO DE SESSÃO EXISTENTE AO CARREGAR A PÁGINA ----------

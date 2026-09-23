@@ -104,7 +104,7 @@ router.get('/resumo', requireSocio, async (req, res) => {
   const mesCompetencia = new Date().toISOString().slice(0, 7) + '-01';
   try {
     const result = await pool.query(
-      `SELECT u.id, u.nome,
+      `SELECT u.id, u.nome, bm.id AS beneficio_id,
               COALESCE(SUM(a.repasse), 0) AS repasse_acumulado,
               bm.nivel_id, bm.valor AS valor_beneficio, bm.status_id
        FROM tocadalagartixa.usuarios u
@@ -113,7 +113,7 @@ router.get('/resumo', requireSocio, async (req, res) => {
        LEFT JOIN tocadalagartixa.beneficios_mensais bm
          ON bm.usuario_id = u.id AND bm.mes_competencia = $1
        WHERE u.perfil_id = 2
-       GROUP BY u.id, u.nome, bm.nivel_id, bm.valor, bm.status_id
+       GROUP BY u.id, u.nome, bm.id, bm.nivel_id, bm.valor, bm.status_id
        ORDER BY u.nome`,
       [mesCompetencia]
     );
