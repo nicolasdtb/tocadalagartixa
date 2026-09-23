@@ -466,6 +466,137 @@ const views = {
       }
     });
   },
+
+  async estoque(container) {
+    container.innerHTML = '<h2>Estoque</h2><p>Carregando...</p>';
+    const ehSocio = usuarioAtual.perfil_id === 1;
+
+    let materiais = [];
+    try {
+      materiais = await api.get('/estoque/materiais');
+    } catch (e) {
+      container.innerHTML = '<h2>Estoque</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+      return;
+    }
+
+    const opcoesMateriais = materiais
+      .map((m) => `<option value="${m.id}">${m.nome} (${Number(m.quantidade)} ${m.unidade})</option>`)
+      .join('');
+
+    container.innerHTML = `
+      <h2>Estoque</h2>
+
+      ${ehSocio ? `
+        <div class="painel-form" style="max-width:420px; margin-bottom:24px;">
+          <h3>Cadastrar material</h3>
+          <div id="erro-material" class="mensagem-erro"></div>
+          <form id="form-material">
+            <div class="campo"><label for="mat-nome">Nome</label><input type="text" id="mat-nome" required></div>
+            <div class="linha-campos">
+              <div class="campo"><label for="mat-unidade">Unidade</label><input type="text" id="mat-unidade" placeholder="unidade, caixa, litro..." required></div>
+              <div class="campo"><label for="mat-minimo">Qtd. mínima de alerta</label><input type="number" id="mat-minimo" min="0" step="0.01"></div>
+            </div>
+            <button type="submit" class="botao">Cadastrar</button>
+          </form>
+        </div>
+      ` : ''}
+
+      <div class="painel-form" style="max-width:420px; margin-bottom:24px;">
+        <h3>Registrar movimentação</h3>
+        <div id="erro-mov" class="mensagem-erro"></div>
+        <form id="form-movimentacao">
+          <div class="campo">
+            <label for="mov-material">Material</label>
+            <select id="mov-material" required><option value="">Selecione...</option>${opcoesMateriais}</select>
+          </div>
+          <div class="linha-campos">
+            <div class="campo">
+              <label for="mov-tipo">Tipo</label>
+              <select id="mov-tipo" required>
+                ${ehSocio ? '<option value="1">Entrada</option>' : ''}
+                <option value="2">Saída</option>
+              </select>
+            </div>
+            <div class="campo"><label for="mov-quantidade">Quantidade</label><input type="number" id="mov-quantidade" min="0.01" step="0.01" required></div>
+          </div>
+          <div class="campo"><label for="mov-obs">Observação (opcional)</label><input type="text" id="mov-obs"></div>
+          <button type="submit" class="botao">Registrar</button>
+        </form>
+      </div>
+
+      <h3>Materiais</h3>
+      <div class="tabela-wrapper">
+        <table class="tabela">
+          <thead><tr><th>Nome</th><th>Unidade</th><th>Quantidade</th><th>Mínimo</th><th>Status</th>${ehSocio ? '<th></th>' : ''}</tr></thead>
+          <tbody id="corpo-materiais"></tbody>
+        </table>
+      </div>
+    `;
+
+    function renderMateriais() {
+      document.getElementById('corpo-materiais').innerHTML = materiais.map((m) => `
+        <tr>
+          <td>${m.nome} ${m.estoque_baixo ? '<span class="badge-alerta">baixo</span>' : ''}</td>
+          <td>${m.unidade}</td>
+          <td>${Number(m.quantidade)}</td>
+          <td>${Number(m.minimo)}</td>
+          <td>${m.status ? 'Ativo' : 'Inativo'}</td>
+          ${ehSocio ? `<td><button class="link-acao" data-acao="status" data-id="${m.id}" data-status="${!m.status}">${m.status ? 'Desativar' : 'Ativar'}</button></td>` : ''}
+        </tr>
+      `).join('') || `<tr><td colspan="${ehSocio ? 6 : 5}">Nenhum material cadastrado.</td></tr>`;
+
+      document.querySelectorAll('[data-acao="status"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await api.patch(`/estoque/materiais/${btn.dataset.id}/status`, { status: btn.dataset.status === 'true' });
+            views.estoque(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao alterar status');
+          }
+        });
+      });
+    }
+
+    if (ehSocio) {
+      document.getElementById('form-material').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-material');
+        erroEl.classList.remove('visivel');
+        try {
+          const criado = await api.post('/estoque/materiais', {
+            nome: document.getElementById('mat-nome').value.trim(),
+            unidade: document.getElementById('mat-unidade').value.trim(),
+            minimo: document.getElementById('mat-minimo').value || 0,
+          });
+          materiais.push(criado);
+          views.estoque(container);
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao cadastrar';
+          erroEl.classList.add('visivel');
+        }
+      });
+    }
+
+    document.getElementById('form-movimentacao').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-mov');
+      erroEl.classList.remove('visivel');
+      try {
+        await api.post('/estoque/movimentacoes', {
+          material_id: document.getElementById('mov-material').value,
+          tipo_id: Number(document.getElementById('mov-tipo').value),
+          quantidade: Number(document.getElementById('mov-quantidade').value),
+          observacao: document.getElementById('mov-obs').value || undefined,
+        });
+        views.estoque(container);
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao registrar movimentação';
+        erroEl.classList.add('visivel');
+      }
+    });
+
+    renderMateriais();
+  },
 };
 
 // ---------- VERIFICAÇÃO DE SESSÃO EXISTENTE AO CARREGAR A PÁGINA ----------
