@@ -597,6 +597,234 @@ const views = {
 
     renderMateriais();
   },
+
+  async financeiro(container) {
+    if (usuarioAtual.perfil_id !== 1) {
+      container.innerHTML = '<h2>Financeiro</h2><p>Acesso restrito aos sócios.</p>';
+      return;
+    }
+
+    const hoje = new Date();
+    const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+
+    container.innerHTML = `
+      <h2>Financeiro</h2>
+      <div class="campo" style="max-width:200px;">
+        <label for="fin-mes">Mês de referência</label>
+        <input type="month" id="fin-mes" value="${mesAtual}">
+      </div>
+
+      <div class="linha-campos" style="align-items:flex-start;">
+        <div class="painel-form" style="flex:1;">
+          <h3>Nova entrada</h3>
+          <div id="erro-entrada" class="mensagem-erro"></div>
+          <form id="form-entrada">
+            <div class="campo"><label for="ent-valor">Valor (R$)</label><input type="number" id="ent-valor" min="0.01" step="0.01" required></div>
+            <div class="campo"><label for="ent-desc">Descrição (opcional)</label><input type="text" id="ent-desc"></div>
+            <button type="submit" class="botao">Registrar entrada</button>
+          </form>
+        </div>
+
+        <div class="painel-form" style="flex:1;">
+          <h3>Orçamento do mês</h3>
+          <div id="erro-orcamento" class="mensagem-erro"></div>
+          <form id="form-orcamento">
+            <div class="campo">
+              <label for="orc-categoria">Categoria</label>
+              <select id="orc-categoria" required>
+                <option value="1">Operacional</option>
+                <option value="2">Materiais</option>
+              </select>
+            </div>
+            <div class="campo"><label for="orc-valor">Valor (R$)</label><input type="number" id="orc-valor" min="0" step="0.01" required></div>
+            <button type="submit" class="botao">Definir orçamento</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="painel-form" style="max-width:520px; margin-top:20px;">
+        <h3>Lançar gasto</h3>
+        <div id="erro-gasto" class="mensagem-erro"></div>
+        <form id="form-gasto">
+          <div class="linha-campos">
+            <div class="campo">
+              <label for="gasto-categoria">Categoria</label>
+              <select id="gasto-categoria" required>
+                <option value="1">Operacional</option>
+                <option value="2">Materiais</option>
+                <option value="3">Benefícios</option>
+                <option value="4">Marketing</option>
+                <option value="5">Melhorias</option>
+              </select>
+            </div>
+            <div class="campo"><label for="gasto-valor">Valor (R$)</label><input type="number" id="gasto-valor" min="0.01" step="0.01" required></div>
+          </div>
+          <div class="campo"><label for="gasto-desc">Descrição</label><input type="text" id="gasto-desc"></div>
+          <button type="submit" class="botao">Registrar gasto</button>
+        </form>
+      </div>
+
+      <div class="painel-form" style="max-width:640px; margin-top:20px;">
+        <h3>Fechamento do mês</h3>
+        <div id="area-preview"></div>
+        <button class="botao botao-secundario" id="botao-preview">Ver preview do fechamento</button>
+        <button class="botao" id="botao-fechar">Fechar mês</button>
+        <div class="campo" style="margin-top:12px;">
+          <label for="fin-motivo-reabrir">Motivo (para reabrir mês fechado)</label>
+          <input type="text" id="fin-motivo-reabrir" placeholder="Ex: ajuste de lançamento">
+        </div>
+        <button class="botao botao-secundario" id="botao-reabrir">Reabrir mês</button>
+        <div id="msg-fechamento" style="margin-top:12px;"></div>
+      </div>
+
+      <h3 style="margin-top:24px;">Saldos do mês</h3>
+      <div class="tabela-wrapper">
+        <table class="tabela">
+          <thead><tr><th>Categoria</th><th>Saldo inicial</th><th>Destinação</th><th>Gastos</th><th>Saldo final</th></tr></thead>
+          <tbody id="corpo-saldos"><tr><td colspan="5">Clique em "Ver saldos" para carregar.</td></tr></tbody>
+        </table>
+      </div>
+      <button class="botao botao-secundario" id="botao-ver-saldos">Ver saldos</button>
+
+      <h3 style="margin-top:24px;">Lançamentos do mês</h3>
+      <div class="tabela-wrapper">
+        <table class="tabela">
+          <thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Valor</th><th>Descrição</th><th>Usuário</th></tr></thead>
+          <tbody id="corpo-lancamentos"><tr><td colspan="6">Clique em "Ver lançamentos" para carregar.</td></tr></tbody>
+        </table>
+      </div>
+      <button class="botao botao-secundario" id="botao-ver-lancamentos">Ver lançamentos</button>
+    `;
+
+    function mesSelecionado() {
+      return document.getElementById('fin-mes').value;
+    }
+
+    document.getElementById('form-entrada').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-entrada');
+      erroEl.classList.remove('visivel');
+      try {
+        await api.post('/financeiro/entradas', {
+          mes: mesSelecionado(),
+          valor: Number(document.getElementById('ent-valor').value),
+          descricao: document.getElementById('ent-desc').value || undefined,
+        });
+        document.getElementById('form-entrada').reset();
+        alert('Entrada registrada.');
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao registrar entrada';
+        erroEl.classList.add('visivel');
+      }
+    });
+
+    document.getElementById('form-orcamento').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-orcamento');
+      erroEl.classList.remove('visivel');
+      try {
+        await api.post('/financeiro/orcamentos', {
+          categoria_id: Number(document.getElementById('orc-categoria').value),
+          mes: mesSelecionado(),
+          valor: Number(document.getElementById('orc-valor').value),
+        });
+        document.getElementById('form-orcamento').reset();
+        alert('Orçamento definido.');
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao definir orçamento';
+        erroEl.classList.add('visivel');
+      }
+    });
+
+    document.getElementById('form-gasto').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-gasto');
+      erroEl.classList.remove('visivel');
+      try {
+        await api.post('/financeiro/gastos', {
+          categoria_id: Number(document.getElementById('gasto-categoria').value),
+          mes: mesSelecionado(),
+          valor: Number(document.getElementById('gasto-valor').value),
+          descricao: document.getElementById('gasto-desc').value || undefined,
+        });
+        document.getElementById('form-gasto').reset();
+        alert('Gasto registrado.');
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao registrar gasto';
+        erroEl.classList.add('visivel');
+      }
+    });
+
+    document.getElementById('botao-preview').addEventListener('click', async () => {
+      try {
+        const p = await api.get(`/financeiro/fechamento/${mesSelecionado()}/preview`);
+        document.getElementById('area-preview').innerHTML = `
+          <p style="font-size:13px; color:var(--cor-texto-fraco);">
+            E: R$ ${p.E.toFixed(2)} · O: R$ ${p.O.toFixed(2)} · M: R$ ${p.M.toFixed(2)} ·
+            B: R$ ${p.B.toFixed(2)} · K: R$ ${p.K.toFixed(2)} · I (Melhorias): R$ ${p.I.toFixed(2)}
+          </p>`;
+      } catch (err) {
+        alert(err.dados?.erro || 'Erro ao gerar preview');
+      }
+    });
+
+    document.getElementById('botao-fechar').addEventListener('click', async () => {
+      if (!confirm(`Fechar o mês ${mesSelecionado()}?`)) return;
+      try {
+        await api.post(`/financeiro/fechamento/${mesSelecionado()}/fechar`);
+        document.getElementById('msg-fechamento').innerHTML = '<p class="mensagem-sucesso">Mês fechado com sucesso.</p>';
+      } catch (err) {
+        document.getElementById('msg-fechamento').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao fechar mês'}</div>`;
+      }
+    });
+
+    document.getElementById('botao-reabrir').addEventListener('click', async () => {
+      const motivo = document.getElementById('fin-motivo-reabrir').value.trim();
+      if (!motivo) return alert('Informe o motivo da reabertura.');
+      try {
+        await api.post(`/financeiro/fechamento/${mesSelecionado()}/reabrir`, { motivo });
+        document.getElementById('msg-fechamento').innerHTML = '<p class="mensagem-sucesso">Mês reaberto.</p>';
+      } catch (err) {
+        document.getElementById('msg-fechamento').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao reabrir mês'}</div>`;
+      }
+    });
+
+    document.getElementById('botao-ver-saldos').addEventListener('click', async () => {
+      try {
+        const saldos = await api.get(`/financeiro/saldos/${mesSelecionado()}`);
+        document.getElementById('corpo-saldos').innerHTML = saldos.map((s) => `
+          <tr>
+            <td>${s.nome}</td>
+            <td>R$ ${Number(s.saldo_inicial).toFixed(2)}</td>
+            <td>R$ ${Number(s.destinacao).toFixed(2)}</td>
+            <td>R$ ${Number(s.gastos).toFixed(2)}</td>
+            <td>R$ ${Number(s.saldo_final).toFixed(2)}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="5">Mês ainda não fechado.</td></tr>';
+      } catch (err) {
+        alert(err.dados?.erro || 'Erro ao carregar saldos');
+      }
+    });
+
+    document.getElementById('botao-ver-lancamentos').addEventListener('click', async () => {
+      try {
+        const lancamentos = await api.get(`/financeiro/lancamentos/${mesSelecionado()}`);
+        const nomesTipo = { 1: 'Entrada', 2: 'Gasto', 3: 'Ajuste' };
+        document.getElementById('corpo-lancamentos').innerHTML = lancamentos.map((l) => `
+          <tr>
+            <td>${new Date(l.created_at).toLocaleDateString('pt-BR')}</td>
+            <td>${nomesTipo[l.tipo_id]}</td>
+            <td>${l.categoria || '—'}</td>
+            <td>R$ ${Number(l.valor).toFixed(2)}</td>
+            <td>${l.descricao || '—'}</td>
+            <td>${l.usuario_nome}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="6">Nenhum lançamento neste mês.</td></tr>';
+      } catch (err) {
+        alert(err.dados?.erro || 'Erro ao carregar lançamentos');
+      }
+    });
+  },
 };
 
 // ---------- VERIFICAÇÃO DE SESSÃO EXISTENTE AO CARREGAR A PÁGINA ----------

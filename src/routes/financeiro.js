@@ -327,4 +327,24 @@ router.get('/saldos-periodo', requireSocio, async (req, res) => {
   }
 });
 
+router.get("/lancamentos/:mes", requireSocio, async (req, res) => {
+  const mesCompetencia = primeiroDiaMes(req.params.mes);
+  try {
+    const result = await pool.query(
+      `SELECT l.id, l.tipo_id, l.valor, l.descricao, l.created_at,
+              c.nome AS categoria, u.nome AS usuario_nome
+       FROM tocadalagartixa.lancamentos_financeiros l
+       LEFT JOIN tocadalagartixa.categorias_financeiras c ON c.id = l.categoria_id
+       JOIN tocadalagartixa.usuarios u ON u.id = l.usuario_id
+       WHERE l.mes_competencia = $1
+       ORDER BY l.created_at DESC`,
+      [mesCompetencia]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao listar lançamentos" });
+  }
+});
+
 module.exports = router;
