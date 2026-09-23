@@ -40,6 +40,7 @@ router.post('/login', async (req, res) => {
     };
 
     res.json({
+      id:usuario.id,
       nome: usuario.nome,
       perfil_id: usuario.perfil_id,
       primeiro_acesso: usuario.primeiro_acesso,
@@ -63,7 +64,7 @@ router.get('/me', async (req, res) => {
   }
   try {
     const result = await pool.query(
-      'SELECT nome, perfil_id, primeiro_acesso, senha_provisoria FROM tocadalagartixa.usuarios WHERE id = $1',
+      'SELECT id, nome, perfil_id, primeiro_acesso, senha_provisoria FROM tocadalagartixa.usuarios WHERE id = $1',
       [req.session.usuario.id]
     );
     if (result.rows.length === 0) {

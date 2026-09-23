@@ -138,6 +138,183 @@ const views = {
   inicio(container) {
     container.innerHTML = `<h2>Bem-vindo(a), ${usuarioAtual.nome}</h2><p>Use o menu ao lado para navegar pelos módulos.</p>`;
   },
+
+  async agenda(container) {
+    container.innerHTML = '<h2>Agenda</h2><p>Carregando...</p>';
+    const ehSocio = usuarioAtual.perfil_id === 1;
+
+    let residentes = [];
+    if (ehSocio) {
+      try {
+        const usuarios = await api.get('/usuarios');
+        residentes = usuarios.filter((u) => u.perfil_id === 2 && u.status);
+      } catch (e) { /* segue sem lista de residentes se falhar */ }
+    }
+
+    let agendamentos = [];
+    try {
+      agendamentos = await api.get('/agendamentos');
+    } catch (e) {
+      container.innerHTML = `<h2>Agenda</h2><div class="mensagem-erro visivel">Erro ao carregar agendamentos</div>`;
+      return;
+    }
+
+    const opcoesResidentes = residentes
+      .map((r) => `<option value="${r.id}">${r.nome}</option>`)
+      .join('');
+
+    container.innerHTML = `
+      <h2>Agenda</h2>
+      <div class="painel-form" id="painel-form-agendamento">
+        <h3 id="titulo-form-agendamento">Novo agendamento</h3>
+        <div id="erro-agendamento" class="mensagem-erro"></div>
+        <form id="form-agendamento">
+          <input type="hidden" id="ag-id">
+          ${ehSocio ? `
+            <div class="campo">
+              <label for="ag-usuario">Residente</label>
+              <select id="ag-usuario" required>
+                <option value="">Selecione...</option>
+                ${opcoesResidentes}
+              </select>
+            </div>` : ''}
+          <div class="linha-campos">
+            <div class="campo">
+              <label for="ag-data">Data</label>
+              <input type="date" id="ag-data" required>
+            </div>
+            <div class="campo">
+              <label for="ag-horario">Horário</label>
+              <input type="time" id="ag-horario" required>
+            </div>
+          </div>
+          <div class="linha-campos">
+            <div class="campo">
+              <label for="ag-duracao">Duração aprox. (min)</label>
+              <input type="number" id="ag-duracao" min="1">
+            </div>
+            <div class="campo">
+              <label for="ag-valor">Valor da tattoo (R$)</label>
+              <input type="number" id="ag-valor" min="100" step="0.01" required>
+            </div>
+          </div>
+          <button type="submit" class="botao">Salvar agendamento</button>
+          <button type="button" class="botao botao-secundario oculto" id="botao-cancelar-edicao">Cancelar edição</button>
+        </form>
+      </div>
+
+      <h3 style="margin-top:32px;">Próximos agendamentos</h3>
+      <div class="tabela-wrapper">
+        <table class="tabela">
+          <thead>
+            <tr><th>Responsável</th><th>Data</th><th>Horário</th><th>Valor</th><th>Repasse</th><th></th></tr>
+          </thead>
+          <tbody id="corpo-tabela-agendamentos"></tbody>
+        </table>
+      </div>
+    `;
+
+    function renderTabela() {
+      const corpo = document.getElementById('corpo-tabela-agendamentos');
+      const ordenados = [...agendamentos].sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario));
+      corpo.innerHTML = ordenados.map((ag) => {
+        const podeEditar = ehSocio || Number(ag.usuario_id) === Number(usuarioAtual.id);
+        const dataFmt = new Date(ag.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+        return `
+          <tr>
+            <td>${ag.responsavel}</td>
+            <td>${dataFmt}</td>
+            <td>${ag.horario.slice(0, 5)}</td>
+            <td>R$ ${Number(ag.valor).toFixed(2)}</td>
+            <td>R$ ${Number(ag.repasse).toFixed(2)} (${Number(ag.percentual)}%)</td>
+            <td>
+              ${podeEditar ? `
+                <button class="link-acao" data-acao="editar" data-id="${ag.id}">Editar</button>
+                <button class="link-acao link-acao-erro" data-acao="excluir" data-id="${ag.id}">Excluir</button>
+              ` : ''}
+            </td>
+          </tr>
+        `;
+      }).join('') || '<tr><td colspan="6">Nenhum agendamento ainda.</td></tr>';
+
+      corpo.querySelectorAll('[data-acao="editar"]').forEach((btn) => {
+        btn.addEventListener('click', () => preencherEdicao(btn.dataset.id));
+      });
+      corpo.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
+        btn.addEventListener('click', () => excluirAgendamento(btn.dataset.id));
+      });
+    }
+
+    function preencherEdicao(id) {
+      const ag = agendamentos.find((a) => String(a.id) === String(id));
+      if (!ag) return;
+      document.getElementById('titulo-form-agendamento').textContent = 'Editar agendamento';
+      document.getElementById('ag-id').value = ag.id;
+      document.getElementById('ag-data').value = String(ag.data).slice(0, 10);
+      document.getElementById('ag-horario').value = ag.horario.slice(0, 5);
+      document.getElementById('ag-duracao').value = ag.duracao || '';
+      document.getElementById('ag-valor').value = ag.valor;
+      if (ehSocio) document.getElementById('ag-usuario').value = ag.usuario_id;
+      document.getElementById('botao-cancelar-edicao').classList.remove('oculto');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    document.getElementById('botao-cancelar-edicao').addEventListener('click', () => {
+      document.getElementById('form-agendamento').reset();
+      document.getElementById('ag-id').value = '';
+      document.getElementById('titulo-form-agendamento').textContent = 'Novo agendamento';
+      document.getElementById('botao-cancelar-edicao').classList.add('oculto');
+    });
+
+    async function excluirAgendamento(id) {
+      if (!confirm('Excluir este agendamento?')) return;
+      try {
+        await api.delete(`/agendamentos/${id}`);
+        agendamentos = agendamentos.filter((a) => String(a.id) !== String(id));
+        renderTabela();
+      } catch (err) {
+        alert(err.dados?.erro || 'Erro ao excluir');
+      }
+    }
+
+    document.getElementById('form-agendamento').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-agendamento');
+      erroEl.classList.remove('visivel');
+
+      const id = document.getElementById('ag-id').value;
+      const corpo = {
+        data: document.getElementById('ag-data').value,
+        horario: document.getElementById('ag-horario').value,
+        duracao: document.getElementById('ag-duracao').value || undefined,
+        valor: Number(document.getElementById('ag-valor').value),
+      };
+      if (ehSocio) corpo.usuario_id = document.getElementById('ag-usuario').value;
+
+      try {
+        if (id) {
+          const atualizado = await api.put(`/agendamentos/${id}`, corpo);
+          agendamentos = agendamentos.map((a) => String(a.id) === String(id) ? { ...a, ...atualizado, responsavel: a.responsavel } : a);
+        } else {
+          const criado = await api.post('/agendamentos', corpo);
+          const nomeResponsavel = ehSocio
+            ? (residentes.find((r) => String(r.id) === String(corpo.usuario_id))?.nome || '')
+            : usuarioAtual.nome;
+          agendamentos.push({ ...criado, responsavel: nomeResponsavel });
+        }
+        document.getElementById('form-agendamento').reset();
+        document.getElementById('ag-id').value = '';
+        document.getElementById('titulo-form-agendamento').textContent = 'Novo agendamento';
+        document.getElementById('botao-cancelar-edicao').classList.add('oculto');
+        renderTabela();
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao salvar agendamento';
+        erroEl.classList.add('visivel');
+      }
+    });
+
+    renderTabela();
+  },
 };
 
 // ---------- VERIFICAÇÃO DE SESSÃO EXISTENTE AO CARREGAR A PÁGINA ----------

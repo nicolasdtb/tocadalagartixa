@@ -209,3 +209,47 @@ body {
   .nav-item.ativo { border-left: none; border-bottom-color: var(--cor-acento); }
   .conteudo-principal { padding: 20px; }
 }
+
+/* Módulos internos (Agenda, etc.) */
+.painel-form {
+  background: var(--cor-fundo-elevado);
+  border: 1px solid var(--cor-borda);
+  padding: 24px;
+  max-width: 520px;
+}
+.painel-form h3 { margin-top: 0; font-family: var(--fonte-titulo); font-size: 18px; }
+
+.linha-campos { display: flex; gap: 16px; }
+.linha-campos .campo { flex: 1; }
+
+.tabela-wrapper { overflow-x: auto; margin-top: 12px; }
+.tabela { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabela th {
+  text-align: left;
+  color: var(--cor-texto-fraco);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: none;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--cor-borda);
+}
+.tabela td {
+  padding: 10px;
+  border-bottom: 1px solid var(--cor-borda);
+}
+.tabela tr:hover td { background: rgba(255,255,255,0.02); }
+
+.link-acao {
+  background: none;
+  border: none;
+  color: var(--cor-acento);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  margin-right: 12px;
+}
+.link-acao-erro { color: var(--cor-erro); }
+
+.botao { width: auto; display: inline-block; margin-right: 8px; }
+form .botao { width: 100%; }
+form .botao-secundario { width: 100%; margin-top: 8px; }
