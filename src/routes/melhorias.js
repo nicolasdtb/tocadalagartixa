@@ -226,4 +226,26 @@ router.get('/atual', requireAuth, async (req, res) => {
   }
 });
 
+router.delete("/:id", requireSocio, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const atual = await pool.query("SELECT * FROM tocadalagartixa.melhorias WHERE id = $1", [id]);
+    if (atual.rows.length === 0) {
+      return res.status(404).json({ erro: "Melhoria não encontrada" });
+    }
+    if (atual.rows[0].estado_id !== 1) {
+      return res.status(409).json({ erro: "Só é possível excluir itens que ainda estão em progresso (não iniciados ou finalizados)" });
+    }
+    await pool.query("DELETE FROM tocadalagartixa.melhorias WHERE id = $1", [id]);
+    await registrar({
+      usuarioId: req.session.usuario.id, modulo: "melhorias", acao: "exclusao",
+      entidade: "melhorias", entidadeId: id, antes: atual.rows[0],
+    });
+    res.json({ mensagem: "Melhoria removida da fila" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao excluir melhoria" });
+  }
+});
+
 module.exports = router;

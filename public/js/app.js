@@ -825,6 +825,169 @@ const views = {
       }
     });
   },
+
+  async melhorias(container) {
+    container.innerHTML = '<h2>Melhorias</h2><p>Carregando...</p>';
+    const ehSocio = usuarioAtual.perfil_id === 1;
+
+    if (!ehSocio) {
+      let atual;
+      try {
+        atual = await api.get('/melhorias/atual');
+      } catch (e) {
+        container.innerHTML = '<h2>Melhorias</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+        return;
+      }
+
+      if (!atual.melhoria_atual) {
+        container.innerHTML = `
+          <h2>Melhorias</h2>
+          <p>${atual.mensagem}</p>
+          ${atual.ultima_melhoria_adquirida ? `<p style="color:var(--cor-texto-fraco);">Última adquirida: ${atual.ultima_melhoria_adquirida.nome}</p>` : ''}
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <h2>Melhorias</h2>
+        <div class="painel-form" style="max-width:480px;">
+          <p style="color:var(--cor-texto-fraco); margin-top:0;">Melhoria atual</p>
+          <p style="font-size:24px; font-family: var(--fonte-titulo); margin:0 0 16px;">${atual.melhoria_atual}</p>
+          <div class="barra-progresso"><div class="barra-progresso-preenchida" style="width:${Math.min(100, atual.progresso_percentual)}%"></div></div>
+          <p style="margin-top:12px; color:var(--cor-texto-fraco);">
+            R$ ${Number(atual.valor_acumulado).toFixed(2)} de R$ ${Number(atual.valor_alvo).toFixed(2)}
+            ${atual.estado === 'meta_atingida' ? '<span class="mensagem-sucesso" style="display:inline; padding:2px 6px; margin-left:8px;">meta atingida</span>' : ''}
+          </p>
+          ${atual.ultima_melhoria_adquirida ? `<p style="margin-top:16px; font-size:13px; color:var(--cor-texto-fraco);">Última adquirida: ${atual.ultima_melhoria_adquirida.nome}</p>` : ''}
+        </div>
+      `;
+      return;
+    }
+
+    // Visão do sócio: fila completa
+    let fila = [];
+    try {
+      fila = await api.get('/melhorias');
+    } catch (e) {
+      container.innerHTML = '<h2>Melhorias</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+      return;
+    }
+
+    const nomesEstado = { em_progresso: 'Em progresso', meta_atingida: 'Meta atingida', finalizada: 'Finalizada' };
+
+    container.innerHTML = `
+      <h2>Melhorias</h2>
+      <div class="painel-form" style="max-width:420px; margin-bottom:24px;">
+        <h3>Adicionar à fila</h3>
+        <div id="erro-melhoria" class="mensagem-erro"></div>
+        <form id="form-melhoria">
+          <div class="campo"><label for="mel-nome">Nome</label><input type="text" id="mel-nome" required></div>
+          <div class="linha-campos">
+            <div class="campo"><label for="mel-valor">Valor-alvo (R$)</label><input type="number" id="mel-valor" min="1" step="0.01" required></div>
+            <div class="campo"><label for="mel-prioridade">Prioridade</label><input type="number" id="mel-prioridade" min="1" required></div>
+          </div>
+          <button type="submit" class="botao">Adicionar</button>
+        </form>
+      </div>
+
+      <h3>Fila</h3>
+      <div class="tabela-wrapper">
+        <table class="tabela">
+          <thead><tr><th>Prioridade</th><th>Nome</th><th>Valor-alvo</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="corpo-melhorias"></tbody>
+        </table>
+      </div>
+    `;
+
+    function renderFila() {
+      document.getElementById('corpo-melhorias').innerHTML = fila
+        .sort((a, b) => a.prioridade - b.prioridade)
+        .map((m) => `
+          <tr>
+            <td><input type="number" class="input-prioridade" data-id="${m.id}" value="${m.prioridade}" style="width:60px;"></td>
+            <td>${m.nome}</td>
+            <td><input type="number" class="input-valor-alvo" data-id="${m.id}" value="${m.valor_alvo}" step="0.01" style="width:100px;"></td>
+            <td>${nomesEstado[m.estado]}</td>
+            <td>
+              ${m.estado !== 'finalizada' ? `<button class="link-acao" data-acao="finalizar" data-id="${m.id}">Finalizar</button>` : ''}
+              ${m.estado === 'em_progresso' ? `<button class="link-acao link-acao-erro" data-acao="excluir" data-id="${m.id}">Excluir</button>` : ''}
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="5">Fila vazia.</td></tr>';
+
+      document.querySelectorAll('.input-prioridade').forEach((input) => {
+        input.addEventListener('change', async () => {
+          try {
+            await api.patch(`/melhorias/${input.dataset.id}/prioridade`, { prioridade: Number(input.value) });
+            views.melhorias(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao alterar prioridade');
+          }
+        });
+      });
+
+      document.querySelectorAll('.input-valor-alvo').forEach((input) => {
+        input.addEventListener('change', async () => {
+          try {
+            await api.patch(`/melhorias/${input.dataset.id}/valor-alvo`, { valor_alvo: Number(input.value) });
+            views.melhorias(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao alterar valor-alvo');
+          }
+        });
+      });
+
+      document.querySelectorAll('[data-acao="finalizar"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const valor_gasto = prompt('Valor efetivamente gasto (R$):');
+          if (!valor_gasto) return;
+          const mes = prompt('Mês de competência do gasto (AAAA-MM):', new Date().toISOString().slice(0, 7));
+          if (!mes) return;
+          try {
+            await api.post(`/melhorias/${btn.dataset.id}/finalizar`, { valor_gasto: Number(valor_gasto), mes });
+            alert('Melhoria finalizada. Lembre-se de fechar/reabrir o mês no Financeiro para o saldo refletir o gasto.');
+            views.melhorias(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao finalizar melhoria');
+          }
+        });
+      });
+
+      document.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Remover este item da fila?')) return;
+          try {
+            await api.delete(`/melhorias/${btn.dataset.id}`);
+            fila = fila.filter((m) => String(m.id) !== String(btn.dataset.id));
+            renderFila();
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao excluir');
+          }
+        });
+      });
+    }
+
+    document.getElementById('form-melhoria').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-melhoria');
+      erroEl.classList.remove('visivel');
+      try {
+        const criada = await api.post('/melhorias', {
+          nome: document.getElementById('mel-nome').value.trim(),
+          valor_alvo: Number(document.getElementById('mel-valor').value),
+          prioridade: Number(document.getElementById('mel-prioridade').value),
+        });
+        fila.push({ ...criada, estado: 'em_progresso' });
+        document.getElementById('form-melhoria').reset();
+        renderFila();
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao adicionar melhoria';
+        erroEl.classList.add('visivel');
+      }
+    });
+
+    renderFila();
+  },
 };
 
 // ---------- VERIFICAÇÃO DE SESSÃO EXISTENTE AO CARREGAR A PÁGINA ----------
