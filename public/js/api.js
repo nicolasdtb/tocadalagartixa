@@ -11,6 +11,9 @@ const api = {
     const resposta = await fetch('/api' + caminho, opcoes);
     const dados = await resposta.json().catch(() => ({}));
     if (!resposta.ok) {
+      if (resposta.status === 428 && dados.tipo === 'comunicado_pendente' && typeof window.onComunicadoPendente === 'function') {
+        window.onComunicadoPendente(dados);
+      }
       const erro = new Error(dados.erro || 'Erro na requisição');
       erro.status = resposta.status;
       erro.dados = dados;

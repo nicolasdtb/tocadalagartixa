@@ -8,6 +8,25 @@ async function carregarDadosAtuais(usuarioId) {
   return result.rows[0] || null;
 }
 
+async function comunicadoObrigatorioPendente(usuarioId) {
+  const result = await pool.query(
+    `SELECT c.id, c.titulo
+     FROM tocadalagartixa.comunicados c
+     JOIN LATERAL (
+       SELECT id FROM tocadalagartixa.comunicados_versoes
+       WHERE comunicado_id = c.id ORDER BY versao DESC LIMIT 1
+     ) v ON true
+     WHERE c.obrigatorio = true AND c.is_deleted = false
+       AND NOT EXISTS (
+         SELECT 1 FROM tocadalagartixa.comunicados_confirmacoes cc
+         WHERE cc.versao_id = v.id AND cc.usuario_id = $1
+       )
+     LIMIT 1`,
+    [usuarioId]
+  );
+  return result.rows[0] || null;
+}
+
 async function requireAuth(req, res, next) {
   if (!req.session.usuario) {
     return res.status(401).json({ erro: 'Não autenticado' });
@@ -39,11 +58,10 @@ function requireSocio(req, res, next) {
   next();
 }
 
-const ROTAS_LIVRES = ['/api/auth', '/api/primeiro-acesso', '/api/health', '/api/usuarios/trocar-senha'];
+const ROTAS_LIVRES = ['/api/auth', '/api/primeiro-acesso', '/api/health', '/api/usuarios/trocar-senha', '/api/comunicados'];
 
 // Consulta o banco diretamente (não confia na sessão em cache), já que este
-// middleware roda ANTES do requireAuth de cada rota e por isso não pode
-// depender de um valor que só é atualizado depois.
+// middleware roda ANTES do requireAuth de cada rota.
 async function requirePrimeiroAcessoConcluido(req, res, next) {
   const rotaLivre = ROTAS_LIVRES.some((prefixo) => req.path.startsWith(prefixo));
   if (rotaLivre) {
@@ -61,10 +79,23 @@ async function requirePrimeiroAcessoConcluido(req, res, next) {
     }
 
     if (dados.primeiro_acesso === false) {
-      return res.status(428).json({ erro: 'Cadastro inicial pendente. Complete o primeiro acesso antes de continuar.' });
+      return res.status(428).json({ erro: 'Cadastro inicial pendente. Complete o primeiro acesso antes de continuar.', tipo: 'primeiro_acesso' });
     }
     if (dados.senha_provisoria === true) {
-      return res.status(428).json({ erro: 'Troca de senha obrigatória antes de continuar.' });
+      return res.status(428).json({ erro: 'Troca de senha obrigatória antes de continuar.', tipo: 'senha_provisoria' });
+    }
+
+    // Comunicado obrigatório não confirmado trava o uso do resto do app
+    // (residentes; sócios não são travados pelos próprios comunicados publicados).
+    if (dados.perfil_id !== 1) {
+      const pendente = await comunicadoObrigatorioPendente(req.session.usuario.id);
+      if (pendente) {
+        return res.status(428).json({
+          erro: `Existe um comunicado obrigatório pendente de confirmação: "${pendente.titulo}". Confirme a leitura antes de continuar.`,
+          tipo: 'comunicado_pendente',
+          comunicado_id: pendente.id,
+        });
+      }
     }
 
     next();

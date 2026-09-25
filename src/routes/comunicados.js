@@ -39,12 +39,39 @@ router.post('/', requireSocio, async (req, res) => {
   }
 });
 
+// Categorias de motivo de edição
+router.get('/motivos', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, nome FROM tocadalagartixa.motivos_edicao_comunicado ORDER BY nome');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao listar motivos' });
+  }
+});
+
+router.post('/motivos', requireSocio, async (req, res) => {
+  const { nome } = req.body;
+  if (!nome) return res.status(400).json({ erro: 'Campo obrigatório: nome' });
+  try {
+    const result = await pool.query(
+      'INSERT INTO tocadalagartixa.motivos_edicao_comunicado (nome) VALUES ($1) RETURNING *',
+      [nome]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ erro: 'Motivo já cadastrado' });
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao cadastrar motivo' });
+  }
+});
+
 // Editar/publicar nova versão — sócio. Aviso não-bloqueante se versao_base estiver desatualizada.
 router.put('/:id', requireSocio, async (req, res) => {
   const { id } = req.params;
-  const { conteudo, versao_base } = req.body;
-  if (!conteudo || versao_base === undefined) {
-    return res.status(400).json({ erro: 'Campos obrigatórios: conteudo, versao_base (versão sobre a qual a edição foi iniciada)' });
+  const { conteudo, versao_base, motivo_categoria_id, motivo_texto } = req.body;
+  if (!conteudo || versao_base === undefined || !motivo_categoria_id) {
+    return res.status(400).json({ erro: 'Campos obrigatórios: conteudo, versao_base, motivo_categoria_id' });
   }
 
   const client = await pool.connect();
@@ -71,9 +98,9 @@ router.put('/:id', requireSocio, async (req, res) => {
 
     const versaoResult = await client.query(
       `INSERT INTO tocadalagartixa.comunicados_versoes
-        (comunicado_id, versao, conteudo, publicado_por, versao_base)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [id, novaVersao, conteudo, req.session.usuario.id, versao_base]
+        (comunicado_id, versao, conteudo, publicado_por, versao_base, motivo_categoria_id, motivo_texto)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [id, novaVersao, conteudo, req.session.usuario.id, versao_base, motivo_categoria_id, motivo_texto || null]
     );
 
     if (conflito) {
@@ -106,6 +133,7 @@ router.get('/', requireAuth, async (req, res) => {
     const result = await pool.query(
       `SELECT c.id, c.titulo, c.obrigatorio,
               v.versao AS versao_atual, v.conteudo, v.publicado_em,
+              m.nome AS motivo_nome, v.motivo_texto,
               EXISTS (
                 SELECT 1 FROM tocadalagartixa.comunicados_confirmacoes cc
                 WHERE cc.versao_id = v.id AND cc.usuario_id = $1
@@ -115,6 +143,7 @@ router.get('/', requireAuth, async (req, res) => {
          SELECT * FROM tocadalagartixa.comunicados_versoes
          WHERE comunicado_id = c.id ORDER BY versao DESC LIMIT 1
        ) v ON true
+       LEFT JOIN tocadalagartixa.motivos_edicao_comunicado m ON m.id = v.motivo_categoria_id
        WHERE c.is_deleted = false
        ORDER BY v.publicado_em DESC`,
       [req.session.usuario.id]
@@ -131,7 +160,10 @@ router.get('/:id/versoes', requireSocio, async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      `SELECT * FROM tocadalagartixa.comunicados_versoes WHERE comunicado_id = $1 ORDER BY versao`,
+      `SELECT v.*, m.nome AS motivo_nome
+       FROM tocadalagartixa.comunicados_versoes v
+       LEFT JOIN tocadalagartixa.motivos_edicao_comunicado m ON m.id = v.motivo_categoria_id
+       WHERE v.comunicado_id = $1 ORDER BY v.versao`,
       [id]
     );
     res.json(result.rows);

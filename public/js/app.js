@@ -115,6 +115,12 @@ function iniciarDashboard() {
 
   mostrarTela('appShell');
   navegarPara('inicio');
+
+  // Verificação leve pra já disparar o bloqueio de comunicado obrigatório
+  // assim que o dashboard carrega, sem esperar o usuário clicar em outra aba.
+  if (!ehSocio) {
+    api.get('/metas/niveis').catch(() => {});
+  }
 }
 
 document.querySelectorAll('.nav-item').forEach((botao) => {
@@ -132,6 +138,18 @@ function navegarPara(view) {
     container.innerHTML = '<h2>Em construção</h2>';
   }
 }
+
+// Se qualquer chamada à API indicar comunicado obrigatório pendente,
+// força a navegação para a aba de Comunicados até o usuário confirmar.
+let avisoComunicadoMostrado = false;
+window.onComunicadoPendente = (dados) => {
+  if (!avisoComunicadoMostrado) {
+    avisoComunicadoMostrado = true;
+    alert(dados.erro);
+    setTimeout(() => { avisoComunicadoMostrado = false; }, 1000);
+  }
+  navegarPara('comunicados');
+};
 
 // Registro de views — cada módulo será preenchido nas próximas etapas
 const views = {
@@ -987,6 +1005,192 @@ const views = {
     });
 
     renderFila();
+  },
+
+  async comunicados(container) {
+    container.innerHTML = '<h2>Comunicados</h2><p>Carregando...</p>';
+    const ehSocio = usuarioAtual.perfil_id === 1;
+
+    let lista = [];
+    try {
+      lista = await api.get('/comunicados');
+    } catch (e) {
+      container.innerHTML = '<h2>Comunicados</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <h2>Comunicados</h2>
+
+      ${ehSocio ? `
+        <div class="painel-form" style="max-width:520px; margin-bottom:24px;">
+          <h3>Novo comunicado</h3>
+          <div id="erro-comunicado" class="mensagem-erro"></div>
+          <form id="form-comunicado">
+            <div class="campo"><label for="com-titulo">Título</label><input type="text" id="com-titulo" required></div>
+            <div class="campo"><label for="com-conteudo">Conteúdo</label><textarea id="com-conteudo" rows="4" required style="width:100%; background:var(--cor-fundo); border:1px solid var(--cor-borda); color:var(--cor-texto); padding:10px; font-family:var(--fonte-corpo);"></textarea></div>
+            <label style="font-size:13px; color:var(--cor-texto-fraco); display:flex; align-items:center; gap:6px; margin-bottom:12px;">
+              <input type="checkbox" id="com-obrigatorio"> Obrigatório (exige confirmação de leitura)
+            </label>
+            <button type="submit" class="botao">Publicar</button>
+          </form>
+          <button class="link-acao" id="botao-novo-motivo" style="margin-top:8px;">+ cadastrar nova categoria de motivo de edição</button>
+        </div>
+      ` : ''}
+
+      <div id="lista-comunicados"></div>
+
+      <div id="modal-historico-versoes" class="modal oculto">
+        <div class="modal-conteudo" style="max-width:560px; max-height:80vh; overflow-y:auto;">
+          <h3>Histórico de versões</h3>
+          <div id="corpo-historico-versoes"></div>
+          <button class="botao botao-secundario" id="botao-fechar-historico">Fechar</button>
+        </div>
+      </div>
+    `;
+
+    function renderLista() {
+      const container2 = document.getElementById('lista-comunicados');
+      if (lista.length === 0) {
+        container2.innerHTML = '<p style="color:var(--cor-texto-fraco);">Nenhum comunicado no momento.</p>';
+        return;
+      }
+      container2.innerHTML = lista.map((c) => `
+        <div class="painel-form" style="max-width:640px; margin-bottom:16px;">
+          <h3>${c.titulo} ${c.obrigatorio ? '<span class="badge-alerta" style="background:rgba(124,58,237,0.15); border-color:var(--cor-acento); color:#d8c4ff;">obrigatório</span>' : ''}</h3>
+          <p style="white-space:pre-wrap;">${c.conteudo}</p>
+          <p style="font-size:12px; color:var(--cor-texto-fraco);">
+            v${c.versao_atual} · publicado em ${new Date(c.publicado_em).toLocaleString('pt-BR')}
+            ${c.motivo_nome ? `· motivo: ${c.motivo_nome}${c.motivo_texto ? ` (${c.motivo_texto})` : ''}` : ''}
+          </p>
+          ${!ehSocio ? (
+            c.confirmado_pelo_usuario
+              ? '<p class="mensagem-sucesso" style="display:inline-block;">Leitura confirmada</p>'
+              : `<button class="botao botao-secundario" data-acao="confirmar" data-id="${c.id}" style="width:auto;">Confirmar leitura</button>`
+          ) : `
+            <div style="margin-top:12px; display:flex; gap:8px;">
+              <button class="link-acao" data-acao="editar" data-id="${c.id}" data-versao="${c.versao_atual}">Editar</button>
+              <button class="link-acao" data-acao="historico" data-id="${c.id}">Ver histórico de versões</button>
+              <button class="link-acao link-acao-erro" data-acao="excluir" data-id="${c.id}">Excluir</button>
+            </div>
+          `}
+        </div>
+      `).join('');
+
+      container2.querySelectorAll('[data-acao="confirmar"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await api.post(`/comunicados/${btn.dataset.id}/confirmar`);
+            views.comunicados(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao confirmar');
+          }
+        });
+      });
+
+      container2.querySelectorAll('[data-acao="historico"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            const versoes = await api.get(`/comunicados/${btn.dataset.id}/versoes`);
+            const html = versoes.map((v) => `
+              <div style="border-bottom:1px solid var(--cor-borda); padding:10px 0;">
+                <p style="margin:0; font-size:13px; color:var(--cor-texto-fraco);">
+                  v${v.versao} · ${new Date(v.publicado_em).toLocaleString('pt-BR')}
+                  ${v.motivo_nome ? `· Motivo: ${v.motivo_nome}${v.motivo_texto ? ` (${v.motivo_texto})` : ''}` : ' · versão inicial'}
+                </p>
+                <p style="margin:4px 0 0; white-space:pre-wrap;">${v.conteudo}</p>
+              </div>
+            `).join('');
+            document.getElementById('corpo-historico-versoes').innerHTML = html;
+            document.getElementById('modal-historico-versoes').classList.remove('oculto');
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao carregar histórico');
+          }
+        });
+      });
+
+      container2.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Excluir este comunicado?')) return;
+          try {
+            await api.delete(`/comunicados/${btn.dataset.id}`);
+            lista = lista.filter((c) => String(c.id) !== String(btn.dataset.id));
+            renderLista();
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao excluir');
+          }
+        });
+      });
+
+      container2.querySelectorAll('[data-acao="editar"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const comunicado = lista.find((c) => String(c.id) === String(btn.dataset.id));
+          const novoConteudo = prompt('Novo conteúdo:', comunicado.conteudo);
+          if (novoConteudo === null || novoConteudo.trim() === '') return;
+
+          let motivos = [];
+          try {
+            motivos = await api.get('/comunicados/motivos');
+          } catch (e) { /* segue sem categorias se falhar */ }
+
+          const listaMotivos = motivos.map((m, i) => `${i + 1}. ${m.nome}`).join('\n');
+          const escolha = prompt(`Motivo da edição — escolha o número:\n${listaMotivos}`);
+          const motivoEscolhido = motivos[Number(escolha) - 1];
+          if (!motivoEscolhido) return alert('Motivo inválido.');
+
+          const motivoTexto = prompt('Comentário adicional sobre a edição (opcional):') || undefined;
+
+          try {
+            const resultado = await api.put(`/comunicados/${btn.dataset.id}`, {
+              conteudo: novoConteudo,
+              versao_base: btn.dataset.versao,
+              motivo_categoria_id: motivoEscolhido.id,
+              motivo_texto: motivoTexto,
+            });
+            if (resultado.aviso) alert(resultado.aviso);
+            views.comunicados(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao editar');
+          }
+        });
+      });
+    }
+
+    if (ehSocio) {
+      document.getElementById('form-comunicado').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-comunicado');
+        erroEl.classList.remove('visivel');
+        try {
+          await api.post('/comunicados', {
+            titulo: document.getElementById('com-titulo').value.trim(),
+            conteudo: document.getElementById('com-conteudo').value.trim(),
+            obrigatorio: document.getElementById('com-obrigatorio').checked,
+          });
+          views.comunicados(container);
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao publicar';
+          erroEl.classList.add('visivel');
+        }
+      });
+
+      document.getElementById('botao-novo-motivo').addEventListener('click', async () => {
+        const nome = prompt('Nome da nova categoria de motivo:');
+        if (!nome || !nome.trim()) return;
+        try {
+          await api.post('/comunicados/motivos', { nome: nome.trim() });
+          alert('Categoria cadastrada.');
+        } catch (err) {
+          alert(err.dados?.erro || 'Erro ao cadastrar categoria');
+        }
+      });
+    }
+
+    renderLista();
+
+    document.getElementById('botao-fechar-historico').addEventListener('click', () => {
+      document.getElementById('modal-historico-versoes').classList.add('oculto');
+    });
   },
 };
 
