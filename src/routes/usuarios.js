@@ -9,11 +9,7 @@ const router = express.Router();
 
 // Criação de usuário — só sócio
 router.post('/', requireSocio, async (req, res) => {
-  const { nome, email, telefone, cpf, perfil_id } = req.body;
-
-  if (!nome || !email || !telefone || !cpf || !perfil_id) {
-    return res.status(400).json({ erro: 'Campos obrigatórios: nome, email, telefone, cpf, perfil_id' });
-  }
+  const { perfil_id } = req.body;
 
   if (![1, 2].includes(Number(perfil_id))) {
     return res.status(400).json({ erro: 'perfil_id inválido (1 = sócio, 2 = residente)' });
@@ -26,10 +22,10 @@ router.post('/', requireSocio, async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO tocadalagartixa.usuarios
-        (nome, email, telefone, cpf, login, senha, perfil_id, status, primeiro_acesso)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, false)
-       RETURNING id, nome, login, perfil_id`,
-      [nome, email, telefone, cpf, login, senhaHash, perfil_id]
+        (login, senha, perfil_id, status, primeiro_acesso)
+       VALUES ($1, $2, $3, true, false)
+       RETURNING id, login, perfil_id`,
+      [login, senhaHash, perfil_id]
     );
 
     // Credenciais em texto puro só aparecem aqui, nesta resposta única —

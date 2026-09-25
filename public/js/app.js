@@ -1061,7 +1061,7 @@ const views = {
           <p style="white-space:pre-wrap;">${c.conteudo}</p>
           <p style="font-size:12px; color:var(--cor-texto-fraco);">
             v${c.versao_atual} · publicado em ${new Date(c.publicado_em).toLocaleString('pt-BR')}
-            ${c.motivo_nome ? `· motivo: ${c.motivo_nome}${c.motivo_texto ? ` (${c.motivo_texto})` : ''}` : ''}
+            ${c.motivo_nome ? `· Motivo: ${c.motivo_nome}${c.motivo_texto ? ` (${c.motivo_texto})` : ''}` : ''}
           </p>
           ${!ehSocio ? (
             c.confirmado_pelo_usuario
@@ -1096,7 +1096,7 @@ const views = {
               <div style="border-bottom:1px solid var(--cor-borda); padding:10px 0;">
                 <p style="margin:0; font-size:13px; color:var(--cor-texto-fraco);">
                   v${v.versao} · ${new Date(v.publicado_em).toLocaleString('pt-BR')}
-                  ${v.motivo_nome ? `· motivo: ${v.motivo_nome}${v.motivo_texto ? ` (${v.motivo_texto})` : ''}` : ' · versão inicial'}
+                  ${v.motivo_nome ? `· Motivo: ${v.motivo_nome}${v.motivo_texto ? ` (${v.motivo_texto})` : ''}` : ' · versão inicial'}
                 </p>
                 <p style="margin:4px 0 0; white-space:pre-wrap;">${v.conteudo}</p>
               </div>
@@ -1212,20 +1212,15 @@ const views = {
       <h2>Usuários</h2>
       <div class="painel-form" style="max-width:480px; margin-bottom:24px;">
         <h3>Novo usuário</h3>
+        <p style="color:var(--cor-texto-fraco); font-size:13px; margin-top:0;">
+          Nome, e-mail, telefone e CPF são preenchidos pelo próprio usuário no primeiro acesso.
+        </p>
         <div id="erro-usuario" class="mensagem-erro"></div>
         <div id="sucesso-usuario" class="mensagem-sucesso oculto"></div>
         <form id="form-usuario">
-          <div class="campo"><label for="us-nome">Nome</label><input type="text" id="us-nome" required></div>
-          <div class="linha-campos">
-            <div class="campo"><label for="us-email">E-mail</label><input type="email" id="us-email" required></div>
-            <div class="campo"><label for="us-telefone">Telefone</label><input type="text" id="us-telefone" required></div>
-          </div>
-          <div class="linha-campos">
-            <div class="campo"><label for="us-cpf">CPF</label><input type="text" id="us-cpf" required></div>
-            <div class="campo">
-              <label for="us-perfil">Perfil</label>
-              <select id="us-perfil"><option value="2">Residente</option><option value="1">Sócio</option></select>
-            </div>
+          <div class="campo">
+            <label for="us-perfil">Perfil</label>
+            <select id="us-perfil"><option value="2">Residente</option><option value="1">Sócio</option></select>
           </div>
           <button type="submit" class="botao">Criar usuário</button>
         </form>
@@ -1243,7 +1238,7 @@ const views = {
     function renderUsuarios() {
       document.getElementById('corpo-usuarios').innerHTML = lista.map((u) => `
         <tr>
-          <td>${u.nome}</td>
+          <td>${u.nome || '(cadastro pendente)'}</td>
           <td>${u.login}</td>
           <td>${u.perfil_id === 1 ? 'Sócio' : 'Residente'}</td>
           <td>${u.status ? 'Ativo' : 'Inativo'}</td>
@@ -1299,10 +1294,6 @@ const views = {
       sucessoEl.classList.add('oculto');
       try {
         const resultado = await api.post('/usuarios', {
-          nome: document.getElementById('us-nome').value.trim(),
-          email: document.getElementById('us-email').value.trim(),
-          telefone: document.getElementById('us-telefone').value.trim(),
-          cpf: document.getElementById('us-cpf').value.trim(),
           perfil_id: Number(document.getElementById('us-perfil').value),
         });
         sucessoEl.textContent = `Usuário criado! Login: ${resultado.credenciais_iniciais.login} · Senha provisória: ${resultado.credenciais_iniciais.senha} (anote agora, não aparece de novo)`;
@@ -1330,3 +1321,12 @@ const views = {
     mostrarTela('login');
   }
 })();
+
+// Registro do Service Worker (PWA)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch((err) => {
+      console.error('Falha ao registrar service worker:', err);
+    });
+  });
+}
