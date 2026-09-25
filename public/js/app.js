@@ -1096,7 +1096,7 @@ const views = {
               <div style="border-bottom:1px solid var(--cor-borda); padding:10px 0;">
                 <p style="margin:0; font-size:13px; color:var(--cor-texto-fraco);">
                   v${v.versao} · ${new Date(v.publicado_em).toLocaleString('pt-BR')}
-                  ${v.motivo_nome ? `· Motivo: ${v.motivo_nome}${v.motivo_texto ? ` (${v.motivo_texto})` : ''}` : ' · versão inicial'}
+                  ${v.motivo_nome ? `· motivo: ${v.motivo_nome}${v.motivo_texto ? ` (${v.motivo_texto})` : ''}` : ' · versão inicial'}
                 </p>
                 <p style="margin:4px 0 0; white-space:pre-wrap;">${v.conteudo}</p>
               </div>
@@ -1191,6 +1191,132 @@ const views = {
     document.getElementById('botao-fechar-historico').addEventListener('click', () => {
       document.getElementById('modal-historico-versoes').classList.add('oculto');
     });
+  },
+
+  async usuarios(container) {
+    if (usuarioAtual.perfil_id !== 1) {
+      container.innerHTML = '<h2>Usuários</h2><p>Acesso restrito aos sócios.</p>';
+      return;
+    }
+
+    container.innerHTML = '<h2>Usuários</h2><p>Carregando...</p>';
+    let lista = [];
+    try {
+      lista = await api.get('/usuarios');
+    } catch (e) {
+      container.innerHTML = '<h2>Usuários</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <h2>Usuários</h2>
+      <div class="painel-form" style="max-width:480px; margin-bottom:24px;">
+        <h3>Novo usuário</h3>
+        <div id="erro-usuario" class="mensagem-erro"></div>
+        <div id="sucesso-usuario" class="mensagem-sucesso oculto"></div>
+        <form id="form-usuario">
+          <div class="campo"><label for="us-nome">Nome</label><input type="text" id="us-nome" required></div>
+          <div class="linha-campos">
+            <div class="campo"><label for="us-email">E-mail</label><input type="email" id="us-email" required></div>
+            <div class="campo"><label for="us-telefone">Telefone</label><input type="text" id="us-telefone" required></div>
+          </div>
+          <div class="linha-campos">
+            <div class="campo"><label for="us-cpf">CPF</label><input type="text" id="us-cpf" required></div>
+            <div class="campo">
+              <label for="us-perfil">Perfil</label>
+              <select id="us-perfil"><option value="2">Residente</option><option value="1">Sócio</option></select>
+            </div>
+          </div>
+          <button type="submit" class="botao">Criar usuário</button>
+        </form>
+      </div>
+
+      <h3>Todos os usuários</h3>
+      <div class="tabela-wrapper">
+        <table class="tabela">
+          <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Status</th><th></th></tr></thead>
+          <tbody id="corpo-usuarios"></tbody>
+        </table>
+      </div>
+    `;
+
+    function renderUsuarios() {
+      document.getElementById('corpo-usuarios').innerHTML = lista.map((u) => `
+        <tr>
+          <td>${u.nome}</td>
+          <td>${u.login}</td>
+          <td>${u.perfil_id === 1 ? 'Sócio' : 'Residente'}</td>
+          <td>${u.status ? 'Ativo' : 'Inativo'}</td>
+          <td>
+            <button class="link-acao" data-acao="status" data-id="${u.id}" data-status="${!u.status}">${u.status ? 'Desativar' : 'Ativar'}</button>
+            <button class="link-acao" data-acao="perfil" data-id="${u.id}" data-perfil="${u.perfil_id === 1 ? 2 : 1}">Tornar ${u.perfil_id === 1 ? 'Residente' : 'Sócio'}</button>
+            <button class="link-acao" data-acao="redefinir" data-id="${u.id}">Redefinir senha</button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="5">Nenhum usuário.</td></tr>';
+
+      document.querySelectorAll('[data-acao="status"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await api.patch(`/usuarios/${btn.dataset.id}/status`, { status: btn.dataset.status === 'true' });
+            views.usuarios(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao alterar status');
+          }
+        });
+      });
+
+      document.querySelectorAll('[data-acao="perfil"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Confirma a troca de perfil?')) return;
+          try {
+            await api.patch(`/usuarios/${btn.dataset.id}/perfil`, { perfil_id: Number(btn.dataset.perfil) });
+            views.usuarios(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao alterar perfil');
+          }
+        });
+      });
+
+      document.querySelectorAll('[data-acao="redefinir"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Gerar nova senha provisória para este usuário?')) return;
+          try {
+            const resultado = await api.post(`/usuarios/${btn.dataset.id}/redefinir-senha`);
+            alert(`Nova senha provisória: ${resultado.nova_senha_provisoria}\n\nAnote e repasse ao usuário — ela só aparece aqui uma vez.`);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao redefinir senha');
+          }
+        });
+      });
+    }
+
+    document.getElementById('form-usuario').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-usuario');
+      const sucessoEl = document.getElementById('sucesso-usuario');
+      erroEl.classList.remove('visivel');
+      sucessoEl.classList.add('oculto');
+      try {
+        const resultado = await api.post('/usuarios', {
+          nome: document.getElementById('us-nome').value.trim(),
+          email: document.getElementById('us-email').value.trim(),
+          telefone: document.getElementById('us-telefone').value.trim(),
+          cpf: document.getElementById('us-cpf').value.trim(),
+          perfil_id: Number(document.getElementById('us-perfil').value),
+        });
+        sucessoEl.textContent = `Usuário criado! Login: ${resultado.credenciais_iniciais.login} · Senha provisória: ${resultado.credenciais_iniciais.senha} (anote agora, não aparece de novo)`;
+        sucessoEl.classList.remove('oculto');
+        document.getElementById('form-usuario').reset();
+        lista = await api.get('/usuarios');
+        renderUsuarios();
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao criar usuário';
+        erroEl.classList.add('visivel');
+      }
+    });
+
+    renderUsuarios();
   },
 };
 
