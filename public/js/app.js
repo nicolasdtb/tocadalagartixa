@@ -7,6 +7,50 @@ const telas = {
 
 let usuarioAtual = null;
 
+// ---------- OVERLAY DE TELA CHEIA (padrão reutilizável de criação/edição) ----------
+function abrirOverlay(titulo, htmlCorpo) {
+  fecharOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'overlay-ativo';
+  overlay.className = 'overlay-tela';
+  overlay.innerHTML = `
+    <div class="overlay-conteudo">
+      <div class="overlay-cabecalho">
+        <h3>${titulo}</h3>
+        <button class="overlay-fechar" aria-label="Fechar" type="button">&times;</button>
+      </div>
+      <div class="overlay-corpo">${htmlCorpo}</div>
+    </div>
+  `;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharOverlay(); });
+  overlay.querySelector('.overlay-fechar').addEventListener('click', fecharOverlay);
+  document.body.appendChild(overlay);
+  return overlay;
+}
+function fecharOverlay() {
+  const el = document.getElementById('overlay-ativo');
+  if (el) el.remove();
+}
+
+// ---------- BOTÃO FIXO DE AÇÃO PRINCIPAL (rodapé) ----------
+function mostrarBotaoFixoRodape(texto, aoClicar) {
+  let btn = document.getElementById('botao-fixo-rodape');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'botao-fixo-rodape';
+    btn.className = 'botao-fixo-rodape';
+    btn.type = 'button';
+    document.body.appendChild(btn);
+  }
+  btn.textContent = texto;
+  btn.onclick = aoClicar;
+  btn.classList.remove('oculto');
+}
+function esconderBotaoFixoRodape() {
+  const btn = document.getElementById('botao-fixo-rodape');
+  if (btn) btn.classList.add('oculto');
+}
+
 function mostrarTela(nome) {
   Object.values(telas).forEach((el) => el.classList.remove('ativo'));
   Object.values(telas).forEach((el) => {
@@ -98,11 +142,11 @@ document.getElementById('form-trocar-senha').addEventListener('submit', async (e
 });
 
 // ---------- LOGOUT ----------
-document.getElementById('botao-logout').addEventListener('click', async () => {
+async function fazerLogout() {
   await api.post('/auth/logout');
   usuarioAtual = null;
   location.reload();
-});
+}
 
 // ---------- DASHBOARD ----------
 function iniciarDashboard() {
@@ -124,10 +168,17 @@ function iniciarDashboard() {
 }
 
 document.querySelectorAll('.nav-item').forEach((botao) => {
-  botao.addEventListener('click', () => navegarPara(botao.dataset.view));
+  botao.addEventListener('click', () => {
+    if (botao.dataset.view === 'sair') {
+      fazerLogout();
+    } else {
+      navegarPara(botao.dataset.view);
+    }
+  });
 });
 
 function navegarPara(view) {
+  esconderBotaoFixoRodape();
   document.querySelectorAll('.nav-item').forEach((b) => {
     b.classList.toggle('ativo', b.dataset.view === view);
   });
@@ -497,32 +548,83 @@ const views = {
       return;
     }
 
-    const opcoesMateriais = materiais
-      .map((m) => `<option value="${m.id}">${m.nome} (${Number(m.quantidade)} ${m.unidade})</option>`)
-      .join('');
-
     container.innerHTML = `
-      <h2>Estoque</h2>
+      <h2>Estoque ${ehSocio ? '<button class="link-acao" id="botao-novo-material" style="font-size:14px;">+ cadastrar material</button>' : ''}</h2>
+      <div id="lista-materiais" class="lista-cards"></div>
+    `;
 
-      ${ehSocio ? `
-        <div class="painel-form" style="max-width:420px; margin-bottom:24px;">
-          <h3>Cadastrar material</h3>
-          <div id="erro-material" class="mensagem-erro"></div>
-          <form id="form-material">
-            <div class="campo"><label for="mat-nome">Nome</label><input type="text" id="mat-nome" required></div>
-            <div class="linha-campos">
-              <div class="campo"><label for="mat-unidade">Unidade</label><input type="text" id="mat-unidade" placeholder="unidade, caixa, litro..." required></div>
-              <div class="campo"><label for="mat-minimo">Qtd. mínima de alerta</label><input type="number" id="mat-minimo" min="0" step="0.01"></div>
+    function renderMateriais() {
+      const alvo = document.getElementById('lista-materiais');
+      alvo.innerHTML = materiais.map((m) => `
+        <div class="card-item ${m.estoque_baixo ? 'card-destaque' : ''}">
+          <div class="card-item-topo">
+            <h3>${m.nome}</h3>
+            ${m.estoque_baixo ? '<span class="badge badge-escarlate">Estoque baixo</span>' : ''}
+            ${!m.status ? '<span class="badge" style="background:rgba(255,255,255,0.08); border:1px solid var(--cor-borda); color:var(--cor-texto-fraco);">Inativo</span>' : ''}
+          </div>
+          <p class="card-item-meta">${Number(m.quantidade)} ${m.unidade} em estoque · mínimo ${Number(m.minimo)}</p>
+          ${ehSocio ? `
+            <div class="card-item-acoes">
+              <button class="link-acao" data-acao="status" data-id="${m.id}" data-status="${!m.status}">${m.status ? 'Desativar' : 'Ativar'}</button>
             </div>
-            <button type="submit" class="botao">Cadastrar</button>
-          </form>
+          ` : ''}
         </div>
-      ` : ''}
+      `).join('') || '<p style="color:var(--cor-texto-fraco);">Nenhum material cadastrado.</p>';
 
-      <div class="painel-form" style="max-width:420px; margin-bottom:24px;">
-        <h3>Registrar movimentação</h3>
-        <div id="erro-mov" class="mensagem-erro"></div>
-        <form id="form-movimentacao">
+      alvo.querySelectorAll('[data-acao="status"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await api.patch(`/estoque/materiais/${btn.dataset.id}/status`, { status: btn.dataset.status === 'true' });
+            views.estoque(container);
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao alterar status');
+          }
+        });
+      });
+    }
+
+    function abrirFormularioMaterial() {
+      const corpo = `
+        <div id="erro-material-overlay" class="mensagem-erro"></div>
+        <form id="form-material-overlay">
+          <div class="campo"><label for="mat-nome">Nome</label><input type="text" id="mat-nome" required></div>
+          <div class="linha-campos">
+            <div class="campo"><label for="mat-unidade">Unidade</label><input type="text" id="mat-unidade" placeholder="unidade, caixa, litro..." required></div>
+            <div class="campo"><label for="mat-minimo">Qtd. mínima de alerta</label><input type="number" id="mat-minimo" min="0" step="0.01"></div>
+          </div>
+          <button type="submit" class="botao">Cadastrar</button>
+        </form>
+      `;
+      abrirOverlay('Cadastrar material', corpo);
+
+      document.getElementById('form-material-overlay').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-material-overlay');
+        erroEl.classList.remove('visivel');
+        try {
+          const criado = await api.post('/estoque/materiais', {
+            nome: document.getElementById('mat-nome').value.trim(),
+            unidade: document.getElementById('mat-unidade').value.trim(),
+            minimo: document.getElementById('mat-minimo').value || 0,
+          });
+          materiais.push(criado);
+          fecharOverlay();
+          renderMateriais();
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao cadastrar';
+          erroEl.classList.add('visivel');
+        }
+      });
+    }
+
+    function abrirFormularioMovimentacao() {
+      const opcoesMateriais = materiais
+        .map((m) => `<option value="${m.id}">${m.nome} (${Number(m.quantidade)} ${m.unidade})</option>`)
+        .join('');
+
+      const corpo = `
+        <div id="erro-mov-overlay" class="mensagem-erro"></div>
+        <form id="form-mov-overlay">
           <div class="campo">
             <label for="mov-material">Material</label>
             <select id="mov-material" required><option value="">Selecione...</option>${opcoesMateriais}</select>
@@ -540,81 +642,37 @@ const views = {
           <div class="campo"><label for="mov-obs">Observação (opcional)</label><input type="text" id="mov-obs"></div>
           <button type="submit" class="botao">Registrar</button>
         </form>
-      </div>
+      `;
+      abrirOverlay('Nova movimentação', corpo);
 
-      <h3>Materiais</h3>
-      <div class="tabela-wrapper">
-        <table class="tabela">
-          <thead><tr><th>Nome</th><th>Unidade</th><th>Quantidade</th><th>Mínimo</th><th>Status</th>${ehSocio ? '<th></th>' : ''}</tr></thead>
-          <tbody id="corpo-materiais"></tbody>
-        </table>
-      </div>
-    `;
-
-    function renderMateriais() {
-      document.getElementById('corpo-materiais').innerHTML = materiais.map((m) => `
-        <tr>
-          <td>${m.nome} ${m.estoque_baixo ? '<span class="badge-alerta">baixo</span>' : ''}</td>
-          <td>${m.unidade}</td>
-          <td>${Number(m.quantidade)}</td>
-          <td>${Number(m.minimo)}</td>
-          <td>${m.status ? 'Ativo' : 'Inativo'}</td>
-          ${ehSocio ? `<td><button class="link-acao" data-acao="status" data-id="${m.id}" data-status="${!m.status}">${m.status ? 'Desativar' : 'Ativar'}</button></td>` : ''}
-        </tr>
-      `).join('') || `<tr><td colspan="${ehSocio ? 6 : 5}">Nenhum material cadastrado.</td></tr>`;
-
-      document.querySelectorAll('[data-acao="status"]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          try {
-            await api.patch(`/estoque/materiais/${btn.dataset.id}/status`, { status: btn.dataset.status === 'true' });
-            views.estoque(container);
-          } catch (err) {
-            alert(err.dados?.erro || 'Erro ao alterar status');
-          }
-        });
-      });
-    }
-
-    if (ehSocio) {
-      document.getElementById('form-material').addEventListener('submit', async (e) => {
+      document.getElementById('form-mov-overlay').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const erroEl = document.getElementById('erro-material');
+        const erroEl = document.getElementById('erro-mov-overlay');
         erroEl.classList.remove('visivel');
         try {
-          const criado = await api.post('/estoque/materiais', {
-            nome: document.getElementById('mat-nome').value.trim(),
-            unidade: document.getElementById('mat-unidade').value.trim(),
-            minimo: document.getElementById('mat-minimo').value || 0,
+          await api.post('/estoque/movimentacoes', {
+            material_id: document.getElementById('mov-material').value,
+            tipo_id: Number(document.getElementById('mov-tipo').value),
+            quantidade: Number(document.getElementById('mov-quantidade').value),
+            observacao: document.getElementById('mov-obs').value || undefined,
           });
-          materiais.push(criado);
+          fecharOverlay();
           views.estoque(container);
         } catch (err) {
-          erroEl.textContent = err.dados?.erro || 'Erro ao cadastrar';
+          erroEl.textContent = err.dados?.erro || 'Erro ao registrar movimentação';
           erroEl.classList.add('visivel');
         }
       });
     }
 
-    document.getElementById('form-movimentacao').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-mov');
-      erroEl.classList.remove('visivel');
-      try {
-        await api.post('/estoque/movimentacoes', {
-          material_id: document.getElementById('mov-material').value,
-          tipo_id: Number(document.getElementById('mov-tipo').value),
-          quantidade: Number(document.getElementById('mov-quantidade').value),
-          observacao: document.getElementById('mov-obs').value || undefined,
-        });
-        views.estoque(container);
-      } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao registrar movimentação';
-        erroEl.classList.add('visivel');
-      }
-    });
+    if (ehSocio) {
+      document.getElementById('botao-novo-material').addEventListener('click', abrirFormularioMaterial);
+    }
 
     renderMateriais();
+    mostrarBotaoFixoRodape('+ Nova movimentação', abrirFormularioMovimentacao);
   },
+
 
   async financeiro(container) {
     if (usuarioAtual.perfil_id !== 1) {
@@ -1021,63 +1079,42 @@ const views = {
 
     container.innerHTML = `
       <h2>Comunicados</h2>
-
-      ${ehSocio ? `
-        <div class="painel-form" style="max-width:520px; margin-bottom:24px;">
-          <h3>Novo comunicado</h3>
-          <div id="erro-comunicado" class="mensagem-erro"></div>
-          <form id="form-comunicado">
-            <div class="campo"><label for="com-titulo">Título</label><input type="text" id="com-titulo" required></div>
-            <div class="campo"><label for="com-conteudo">Conteúdo</label><textarea id="com-conteudo" rows="4" required style="width:100%; background:var(--cor-fundo); border:1px solid var(--cor-borda); color:var(--cor-texto); padding:10px; font-family:var(--fonte-corpo);"></textarea></div>
-            <label style="font-size:13px; color:var(--cor-texto-fraco); display:flex; align-items:center; gap:6px; margin-bottom:12px;">
-              <input type="checkbox" id="com-obrigatorio"> Obrigatório (exige confirmação de leitura)
-            </label>
-            <button type="submit" class="botao">Publicar</button>
-          </form>
-          <button class="link-acao" id="botao-novo-motivo" style="margin-top:8px;">+ cadastrar nova categoria de motivo de edição</button>
-        </div>
-      ` : ''}
-
-      <div id="lista-comunicados"></div>
-
-      <div id="modal-historico-versoes" class="modal oculto">
-        <div class="modal-conteudo" style="max-width:560px; max-height:80vh; overflow-y:auto;">
-          <h3>Histórico de versões</h3>
-          <div id="corpo-historico-versoes"></div>
-          <button class="botao botao-secundario" id="botao-fechar-historico">Fechar</button>
-        </div>
-      </div>
+      <div id="lista-comunicados" class="lista-cards"></div>
     `;
 
     function renderLista() {
-      const container2 = document.getElementById('lista-comunicados');
+      const alvo = document.getElementById('lista-comunicados');
       if (lista.length === 0) {
-        container2.innerHTML = '<p style="color:var(--cor-texto-fraco);">Nenhum comunicado no momento.</p>';
+        alvo.innerHTML = '<p style="color:var(--cor-texto-fraco);">Nenhum comunicado no momento.</p>';
         return;
       }
-      container2.innerHTML = lista.map((c) => `
-        <div class="painel-form" style="max-width:640px; margin-bottom:16px;">
-          <h3>${c.titulo} ${c.obrigatorio ? '<span class="badge-alerta" style="background:rgba(124,58,237,0.15); border-color:var(--cor-acento); color:#d8c4ff;">obrigatório</span>' : ''}</h3>
-          <p style="white-space:pre-wrap;">${c.conteudo}</p>
-          <p style="font-size:12px; color:var(--cor-texto-fraco);">
-            v${c.versao_atual} · publicado em ${new Date(c.publicado_em).toLocaleString('pt-BR')}
+      alvo.innerHTML = lista.map((c) => `
+        <div class="card-item ${c.obrigatorio ? 'card-destaque' : ''}">
+          <div class="card-item-topo">
+            <h3>${c.titulo}</h3>
+            ${c.obrigatorio ? '<span class="badge badge-escarlate">Obrigatório</span>' : ''}
+          </div>
+          <p class="card-item-texto">${c.conteudo}</p>
+          <p class="card-item-meta">
+            v${c.versao_atual} · ${new Date(c.publicado_em).toLocaleDateString('pt-BR')}
             ${c.motivo_nome ? `· Motivo: ${c.motivo_nome}${c.motivo_texto ? ` (${c.motivo_texto})` : ''}` : ''}
           </p>
-          ${!ehSocio ? (
-            c.confirmado_pelo_usuario
-              ? '<p class="mensagem-sucesso" style="display:inline-block;">Leitura confirmada</p>'
-              : `<button class="botao botao-secundario" data-acao="confirmar" data-id="${c.id}" style="width:auto;">Confirmar leitura</button>`
-          ) : `
-            <div style="margin-top:12px; display:flex; gap:8px;">
+          <div class="card-item-acoes">
+            ${!ehSocio ? (
+              c.confirmado_pelo_usuario
+                ? '<span class="badge badge-verde">Leitura confirmada</span>'
+                : `<button class="botao" data-acao="confirmar" data-id="${c.id}" style="width:auto;">Confirmar leitura</button>`
+            ) : `
               <button class="link-acao" data-acao="editar" data-id="${c.id}" data-versao="${c.versao_atual}">Editar</button>
-              <button class="link-acao" data-acao="historico" data-id="${c.id}">Ver histórico de versões</button>
+              <button class="link-acao" data-acao="historico" data-id="${c.id}">Histórico</button>
+              ${c.obrigatorio ? `<button class="link-acao" data-acao="confirmacoes" data-id="${c.id}">Ver confirmações</button>` : ''}
               <button class="link-acao link-acao-erro" data-acao="excluir" data-id="${c.id}">Excluir</button>
-            </div>
-          `}
+            `}
+          </div>
         </div>
       `).join('');
 
-      container2.querySelectorAll('[data-acao="confirmar"]').forEach((btn) => {
+      alvo.querySelectorAll('[data-acao="confirmar"]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           try {
             await api.post(`/comunicados/${btn.dataset.id}/confirmar`);
@@ -1088,28 +1125,7 @@ const views = {
         });
       });
 
-      container2.querySelectorAll('[data-acao="historico"]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          try {
-            const versoes = await api.get(`/comunicados/${btn.dataset.id}/versoes`);
-            const html = versoes.map((v) => `
-              <div style="border-bottom:1px solid var(--cor-borda); padding:10px 0;">
-                <p style="margin:0; font-size:13px; color:var(--cor-texto-fraco);">
-                  v${v.versao} · ${new Date(v.publicado_em).toLocaleString('pt-BR')}
-                  ${v.motivo_nome ? `· Motivo: ${v.motivo_nome}${v.motivo_texto ? ` (${v.motivo_texto})` : ''}` : ' · versão inicial'}
-                </p>
-                <p style="margin:4px 0 0; white-space:pre-wrap;">${v.conteudo}</p>
-              </div>
-            `).join('');
-            document.getElementById('corpo-historico-versoes').innerHTML = html;
-            document.getElementById('modal-historico-versoes').classList.remove('oculto');
-          } catch (err) {
-            alert(err.dados?.erro || 'Erro ao carregar histórico');
-          }
-        });
-      });
-
-      container2.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
+      alvo.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           if (!confirm('Excluir este comunicado?')) return;
           try {
@@ -1122,75 +1138,147 @@ const views = {
         });
       });
 
-      container2.querySelectorAll('[data-acao="editar"]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
+      alvo.querySelectorAll('[data-acao="historico"]').forEach((btn) => {
+        btn.addEventListener('click', () => abrirHistorico(btn.dataset.id));
+      });
+
+      alvo.querySelectorAll('[data-acao="confirmacoes"]').forEach((btn) => {
+        btn.addEventListener('click', () => abrirConfirmacoes(btn.dataset.id));
+      });
+
+      alvo.querySelectorAll('[data-acao="editar"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
           const comunicado = lista.find((c) => String(c.id) === String(btn.dataset.id));
-          const novoConteudo = prompt('Novo conteúdo:', comunicado.conteudo);
-          if (novoConteudo === null || novoConteudo.trim() === '') return;
-
-          let motivos = [];
-          try {
-            motivos = await api.get('/comunicados/motivos');
-          } catch (e) { /* segue sem categorias se falhar */ }
-
-          const listaMotivos = motivos.map((m, i) => `${i + 1}. ${m.nome}`).join('\n');
-          const escolha = prompt(`Motivo da edição — escolha o número:\n${listaMotivos}`);
-          const motivoEscolhido = motivos[Number(escolha) - 1];
-          if (!motivoEscolhido) return alert('Motivo inválido.');
-
-          const motivoTexto = prompt('Comentário adicional sobre a edição (opcional):') || undefined;
-
-          try {
-            const resultado = await api.put(`/comunicados/${btn.dataset.id}`, {
-              conteudo: novoConteudo,
-              versao_base: btn.dataset.versao,
-              motivo_categoria_id: motivoEscolhido.id,
-              motivo_texto: motivoTexto,
-            });
-            if (resultado.aviso) alert(resultado.aviso);
-            views.comunicados(container);
-          } catch (err) {
-            alert(err.dados?.erro || 'Erro ao editar');
-          }
+          abrirFormularioComunicado({ modo: 'editar', comunicado, versaoBase: btn.dataset.versao });
         });
       });
     }
 
-    if (ehSocio) {
-      document.getElementById('form-comunicado').addEventListener('submit', async (e) => {
+    async function abrirHistorico(id) {
+      let versoes;
+      try {
+        versoes = await api.get(`/comunicados/${id}/versoes`);
+      } catch (err) {
+        return alert(err.dados?.erro || 'Erro ao carregar histórico');
+      }
+      const html = versoes.map((v) => `
+        <div style="border-bottom:1px solid var(--cor-borda); padding:10px 0;">
+          <p class="card-item-meta">
+            v${v.versao} · ${new Date(v.publicado_em).toLocaleString('pt-BR')}
+            ${v.motivo_nome ? `· Motivo: ${v.motivo_nome}${v.motivo_texto ? ` (${v.motivo_texto})` : ''}` : '· versão inicial'}
+          </p>
+          <p style="white-space:pre-wrap; margin:6px 0 0;">${v.conteudo}</p>
+        </div>
+      `).join('');
+      abrirOverlay('Histórico de versões', html);
+    }
+
+    async function abrirConfirmacoes(id) {
+      let residentes;
+      try {
+        residentes = await api.get(`/comunicados/${id}/confirmacoes`);
+      } catch (err) {
+        return alert(err.dados?.erro || 'Erro ao carregar confirmações');
+      }
+      const html = residentes.map((r) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--cor-borda); padding:10px 0;">
+          <span>${r.nome || r.login}</span>
+          ${r.confirmou
+            ? '<span class="badge badge-verde">Confirmado</span>'
+            : '<span class="badge badge-escarlate">Pendente</span>'}
+        </div>
+      `).join('') || '<p style="color:var(--cor-texto-fraco);">Nenhum residente ativo.</p>';
+      abrirOverlay('Confirmações de leitura', html);
+    }
+
+    async function abrirFormularioComunicado({ modo, comunicado, versaoBase }) {
+      let motivos = [];
+      if (modo === 'editar') {
+        try { motivos = await api.get('/comunicados/motivos'); } catch (e) { /* segue sem categorias se falhar */ }
+      }
+
+      const corpo = `
+        <div id="erro-form-comunicado" class="mensagem-erro"></div>
+        <form id="form-comunicado-overlay">
+          <div class="campo">
+            <label for="fc-titulo">Título</label>
+            <input type="text" id="fc-titulo" value="${modo === 'editar' ? comunicado.titulo : ''}" ${modo === 'editar' ? 'disabled' : ''} required>
+          </div>
+          <div class="campo">
+            <label for="fc-conteudo">Conteúdo</label>
+            <textarea id="fc-conteudo" rows="6" required style="width:100%; background:var(--cor-fundo-input); border:1px solid var(--cor-borda); border-radius:var(--raio-pequeno); color:var(--cor-texto); padding:12px 14px; font-family:var(--fonte-corpo); font-size:15px;">${modo === 'editar' ? comunicado.conteudo : ''}</textarea>
+          </div>
+          ${modo === 'criar' ? `
+            <label class="campo-checkbox"><input type="checkbox" id="fc-obrigatorio"> Obrigatório (exige confirmação de leitura)</label>
+          ` : `
+            <div class="campo">
+              <label for="fc-motivo">Motivo da edição</label>
+              <select id="fc-motivo" required>
+                <option value="">Selecione...</option>
+                ${motivos.map((m) => `<option value="${m.id}">${m.nome}</option>`).join('')}
+              </select>
+            </div>
+            <div class="campo"><label for="fc-motivo-texto">Comentário adicional (opcional)</label><input type="text" id="fc-motivo-texto"></div>
+            <button type="button" class="link-acao" id="fc-nova-categoria" style="margin-bottom:16px;">+ nova categoria de motivo</button>
+          `}
+          <button type="submit" class="botao">${modo === 'criar' ? 'Publicar' : 'Salvar edição'}</button>
+        </form>
+      `;
+
+      abrirOverlay(modo === 'criar' ? 'Novo comunicado' : 'Editar comunicado', corpo);
+
+      if (modo === 'editar') {
+        document.getElementById('fc-nova-categoria').addEventListener('click', async () => {
+          const nome = prompt('Nome da nova categoria de motivo:');
+          if (!nome || !nome.trim()) return;
+          try {
+            const nova = await api.post('/comunicados/motivos', { nome: nome.trim() });
+            const sel = document.getElementById('fc-motivo');
+            const opt = document.createElement('option');
+            opt.value = nova.id;
+            opt.textContent = nova.nome;
+            sel.appendChild(opt);
+            sel.value = nova.id;
+          } catch (err) {
+            alert(err.dados?.erro || 'Erro ao cadastrar categoria');
+          }
+        });
+      }
+
+      document.getElementById('form-comunicado-overlay').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const erroEl = document.getElementById('erro-comunicado');
+        const erroEl = document.getElementById('erro-form-comunicado');
         erroEl.classList.remove('visivel');
         try {
-          await api.post('/comunicados', {
-            titulo: document.getElementById('com-titulo').value.trim(),
-            conteudo: document.getElementById('com-conteudo').value.trim(),
-            obrigatorio: document.getElementById('com-obrigatorio').checked,
-          });
+          if (modo === 'criar') {
+            await api.post('/comunicados', {
+              titulo: document.getElementById('fc-titulo').value.trim(),
+              conteudo: document.getElementById('fc-conteudo').value.trim(),
+              obrigatorio: document.getElementById('fc-obrigatorio').checked,
+            });
+          } else {
+            const resultado = await api.put(`/comunicados/${comunicado.id}`, {
+              conteudo: document.getElementById('fc-conteudo').value.trim(),
+              versao_base: versaoBase,
+              motivo_categoria_id: document.getElementById('fc-motivo').value,
+              motivo_texto: document.getElementById('fc-motivo-texto').value || undefined,
+            });
+            if (resultado.aviso) alert(resultado.aviso);
+          }
+          fecharOverlay();
           views.comunicados(container);
         } catch (err) {
-          erroEl.textContent = err.dados?.erro || 'Erro ao publicar';
+          erroEl.textContent = err.dados?.erro || 'Erro ao salvar';
           erroEl.classList.add('visivel');
-        }
-      });
-
-      document.getElementById('botao-novo-motivo').addEventListener('click', async () => {
-        const nome = prompt('Nome da nova categoria de motivo:');
-        if (!nome || !nome.trim()) return;
-        try {
-          await api.post('/comunicados/motivos', { nome: nome.trim() });
-          alert('Categoria cadastrada.');
-        } catch (err) {
-          alert(err.dados?.erro || 'Erro ao cadastrar categoria');
         }
       });
     }
 
     renderLista();
 
-    document.getElementById('botao-fechar-historico').addEventListener('click', () => {
-      document.getElementById('modal-historico-versoes').classList.add('oculto');
-    });
+    if (ehSocio) {
+      mostrarBotaoFixoRodape('+ Novo comunicado', () => abrirFormularioComunicado({ modo: 'criar' }));
+    }
   },
 
   async usuarios(container) {
@@ -1210,47 +1298,31 @@ const views = {
 
     container.innerHTML = `
       <h2>Usuários</h2>
-      <div class="painel-form" style="max-width:480px; margin-bottom:24px;">
-        <h3>Novo usuário</h3>
-        <p style="color:var(--cor-texto-fraco); font-size:13px; margin-top:0;">
-          Nome, e-mail, telefone e CPF são preenchidos pelo próprio usuário no primeiro acesso.
-        </p>
-        <div id="erro-usuario" class="mensagem-erro"></div>
-        <div id="sucesso-usuario" class="mensagem-sucesso oculto"></div>
-        <form id="form-usuario">
-          <div class="campo">
-            <label for="us-perfil">Perfil</label>
-            <select id="us-perfil"><option value="2">Residente</option><option value="1">Sócio</option></select>
-          </div>
-          <button type="submit" class="botao">Criar usuário</button>
-        </form>
-      </div>
-
-      <h3>Todos os usuários</h3>
-      <div class="tabela-wrapper">
-        <table class="tabela">
-          <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Status</th><th></th></tr></thead>
-          <tbody id="corpo-usuarios"></tbody>
-        </table>
-      </div>
+      <div id="lista-usuarios" class="lista-cards"></div>
     `;
 
     function renderUsuarios() {
-      document.getElementById('corpo-usuarios').innerHTML = lista.map((u) => `
-        <tr>
-          <td>${u.nome || '(cadastro pendente)'}</td>
-          <td>${u.login}</td>
-          <td>${u.perfil_id === 1 ? 'Sócio' : 'Residente'}</td>
-          <td>${u.status ? 'Ativo' : 'Inativo'}</td>
-          <td>
-            <button class="link-acao" data-acao="status" data-id="${u.id}" data-status="${!u.status}">${u.status ? 'Desativar' : 'Ativar'}</button>
+      const alvo = document.getElementById('lista-usuarios');
+      alvo.innerHTML = lista.map((u) => `
+        <div class="card-item">
+          <div class="card-item-topo">
+            <h3>${u.nome || '(cadastro pendente)'}</h3>
+            <span class="badge ${u.perfil_id === 1 ? 'badge-roxo' : ''}" ${u.perfil_id !== 1 ? 'style="background:rgba(255,255,255,0.08); border:1px solid var(--cor-borda); color:var(--cor-texto-fraco);"' : ''}>${u.perfil_id === 1 ? 'Sócio' : 'Residente'}</span>
+          </div>
+          <p class="card-item-meta">
+            login: ${u.login} · ${u.status ? '<span class="badge badge-verde" style="padding:1px 8px;">Ativo</span>' : '<span class="badge badge-escarlate" style="padding:1px 8px;">Inativo</span>'}
+          </p>
+          <div class="card-item-acoes">
+            ${String(u.id) === String(usuarioAtual.id)
+              ? '<span class="card-item-meta">(você)</span>'
+              : `<button class="link-acao" data-acao="status" data-id="${u.id}" data-status="${!u.status}">${u.status ? 'Desativar' : 'Ativar'}</button>`}
             <button class="link-acao" data-acao="perfil" data-id="${u.id}" data-perfil="${u.perfil_id === 1 ? 2 : 1}">Tornar ${u.perfil_id === 1 ? 'Residente' : 'Sócio'}</button>
             <button class="link-acao" data-acao="redefinir" data-id="${u.id}">Redefinir senha</button>
-          </td>
-        </tr>
-      `).join('') || '<tr><td colspan="5">Nenhum usuário.</td></tr>';
+          </div>
+        </div>
+      `).join('') || '<p style="color:var(--cor-texto-fraco);">Nenhum usuário.</p>';
 
-      document.querySelectorAll('[data-acao="status"]').forEach((btn) => {
+      alvo.querySelectorAll('[data-acao="status"]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           try {
             await api.patch(`/usuarios/${btn.dataset.id}/status`, { status: btn.dataset.status === 'true' });
@@ -1261,7 +1333,7 @@ const views = {
         });
       });
 
-      document.querySelectorAll('[data-acao="perfil"]').forEach((btn) => {
+      alvo.querySelectorAll('[data-acao="perfil"]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           if (!confirm('Confirma a troca de perfil?')) return;
           try {
@@ -1273,7 +1345,7 @@ const views = {
         });
       });
 
-      document.querySelectorAll('[data-acao="redefinir"]').forEach((btn) => {
+      alvo.querySelectorAll('[data-acao="redefinir"]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           if (!confirm('Gerar nova senha provisória para este usuário?')) return;
           try {
@@ -1286,28 +1358,44 @@ const views = {
       });
     }
 
-    document.getElementById('form-usuario').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-usuario');
-      const sucessoEl = document.getElementById('sucesso-usuario');
-      erroEl.classList.remove('visivel');
-      sucessoEl.classList.add('oculto');
-      try {
-        const resultado = await api.post('/usuarios', {
-          perfil_id: Number(document.getElementById('us-perfil').value),
-        });
-        sucessoEl.textContent = `Usuário criado! Login: ${resultado.credenciais_iniciais.login} · Senha provisória: ${resultado.credenciais_iniciais.senha} (anote agora, não aparece de novo)`;
-        sucessoEl.classList.remove('oculto');
-        document.getElementById('form-usuario').reset();
-        lista = await api.get('/usuarios');
-        renderUsuarios();
-      } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao criar usuário';
-        erroEl.classList.add('visivel');
-      }
-    });
+    function abrirFormularioUsuario() {
+      const corpo = `
+        <div id="erro-usuario-overlay" class="mensagem-erro"></div>
+        <div id="sucesso-usuario-overlay" class="mensagem-sucesso oculto"></div>
+        <form id="form-usuario-overlay">
+          <div class="campo">
+            <label for="us-perfil">Perfil</label>
+            <select id="us-perfil"><option value="2">Residente</option><option value="1">Sócio</option></select>
+          </div>
+          <p style="color:var(--cor-texto-fraco); font-size:13px;">
+            Nome, e-mail, telefone e CPF são preenchidos pelo próprio usuário no primeiro acesso.
+          </p>
+          <button type="submit" class="botao">Criar usuário</button>
+        </form>
+      `;
+      abrirOverlay('Novo usuário', corpo);
+
+      document.getElementById('form-usuario-overlay').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-usuario-overlay');
+        erroEl.classList.remove('visivel');
+        try {
+          const resultado = await api.post('/usuarios', {
+            perfil_id: Number(document.getElementById('us-perfil').value),
+          });
+          fecharOverlay();
+          alert(`Usuário criado!\nLogin: ${resultado.credenciais_iniciais.login}\nSenha provisória: ${resultado.credenciais_iniciais.senha}\n\nAnote agora, não aparece de novo.`);
+          lista = await api.get('/usuarios');
+          renderUsuarios();
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao criar usuário';
+          erroEl.classList.add('visivel');
+        }
+      });
+    }
 
     renderUsuarios();
+    mostrarBotaoFixoRodape('+ Novo usuário', abrirFormularioUsuario);
   },
 };
 

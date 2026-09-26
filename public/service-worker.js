@@ -1,4 +1,4 @@
-const CACHE_NAME = 'toca-lagartixa-v1';
+const CACHE_NAME = 'toca-lagartixa-v2';
 const ARQUIVOS_ESTATICOS = [
   '/',
   '/index.html',
@@ -6,8 +6,11 @@ const ARQUIVOS_ESTATICOS = [
   '/js/api.js',
   '/js/app.js',
   '/manifest.json',
+  '/favicon.png',
+  '/img/logo.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/icons/icon-maskable-512.png',
 ];
 
 self.addEventListener('install', (event) => {

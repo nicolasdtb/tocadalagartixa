@@ -73,6 +73,9 @@ router.patch('/:id/status', requireSocio, async (req, res) => {
   if (typeof status !== 'boolean') {
     return res.status(400).json({ erro: 'Campo "status" deve ser true ou false' });
   }
+  if (status === false && String(id) === String(req.session.usuario.id)) {
+    return res.status(400).json({ erro: 'Você não pode desativar o próprio usuário' });
+  }
 
   try {
     const antesResult = await pool.query('SELECT status FROM tocadalagartixa.usuarios WHERE id = $1', [id]);

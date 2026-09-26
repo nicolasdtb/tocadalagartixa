@@ -200,6 +200,38 @@ router.post('/:id/confirmar', requireAuth, async (req, res) => {
   }
 });
 
+// Lista quem confirmou (e quem falta confirmar) a versão atual — só sócio.
+router.get('/:id/confirmacoes', requireSocio, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const versaoResult = await pool.query(
+      `SELECT id FROM tocadalagartixa.comunicados_versoes
+       WHERE comunicado_id = $1 ORDER BY versao DESC LIMIT 1`,
+      [id]
+    );
+    if (versaoResult.rows.length === 0) {
+      return res.status(404).json({ erro: 'Comunicado não encontrado' });
+    }
+    const versaoId = versaoResult.rows[0].id;
+
+    const result = await pool.query(
+      `SELECT u.id, u.nome, u.login,
+              EXISTS (
+                SELECT 1 FROM tocadalagartixa.comunicados_confirmacoes cc
+                WHERE cc.versao_id = $1 AND cc.usuario_id = u.id
+              ) AS confirmou
+       FROM tocadalagartixa.usuarios u
+       WHERE u.perfil_id = 2 AND u.status = true
+       ORDER BY confirmou ASC, u.nome`,
+      [versaoId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao listar confirmações' });
+  }
+});
+
 // Excluir (soft delete) — só sócio. Preserva versões e auditoria.
 router.delete('/:id', requireSocio, async (req, res) => {
   const { id } = req.params;
