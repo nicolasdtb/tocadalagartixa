@@ -217,172 +217,203 @@ const views = {
       try {
         const usuarios = await api.get('/usuarios');
         residentes = usuarios.filter((u) => u.perfil_id === 2 && u.status);
-      } catch (e) { /* segue sem lista de residentes se falhar */ }
+      } catch (e) { /* segue sem lista se falhar */ }
     }
 
     let agendamentos = [];
     try {
       agendamentos = await api.get('/agendamentos');
     } catch (e) {
-      container.innerHTML = `<h2>Agenda</h2><div class="mensagem-erro visivel">Erro ao carregar agendamentos</div>`;
+      container.innerHTML = '<h2>Agenda</h2><div class="mensagem-erro visivel">Erro ao carregar agendamentos</div>';
       return;
     }
 
-    const opcoesResidentes = residentes
-      .map((r) => `<option value="${r.id}">${r.nome}</option>`)
-      .join('');
+    const hoje = new Date();
+    let mesAtual = hoje.getMonth();
+    let anoAtual = hoje.getFullYear();
 
     container.innerHTML = `
       <h2>Agenda</h2>
-      <div class="painel-form" id="painel-form-agendamento">
-        <h3 id="titulo-form-agendamento">Novo agendamento</h3>
-        <div id="erro-agendamento" class="mensagem-erro"></div>
-        <form id="form-agendamento">
-          <input type="hidden" id="ag-id">
+      <div class="calendario-cabecalho-mes">
+        <button type="button" id="cal-mes-anterior" aria-label="Mês anterior">&#8249;</button>
+        <h3 id="cal-mes-label"></h3>
+        <button type="button" id="cal-mes-proximo" aria-label="Próximo mês">&#8250;</button>
+      </div>
+      <div class="calendario-dias-semana">
+        <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+      </div>
+      <div class="calendario-grid" id="calendario-grid"></div>
+    `;
+
+    function agendamentosDoDia(dataStr) {
+      return agendamentos.filter((a) => String(a.data).slice(0, 10) === dataStr)
+        .sort((a, b) => a.horario.localeCompare(b.horario));
+    }
+
+    function renderCalendario() {
+      const nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+      document.getElementById('cal-mes-label').textContent = `${nomesMes[mesAtual]} de ${anoAtual}`;
+
+      const primeiroDiaSemana = new Date(anoAtual, mesAtual, 1).getDay();
+      const totalDias = new Date(anoAtual, mesAtual + 1, 0).getDate();
+      const hojeStr = new Date().toISOString().slice(0, 10);
+
+      let html = '';
+      for (let i = 0; i < primeiroDiaSemana; i++) {
+        html += '<div class="calendario-dia vazio"></div>';
+      }
+      for (let dia = 1; dia <= totalDias; dia++) {
+        const dataStr = `${anoAtual}-${String(mesAtual + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+        const qtd = agendamentosDoDia(dataStr).length;
+        html += `
+          <button type="button" class="calendario-dia ${dataStr === hojeStr ? 'hoje' : ''}" data-data="${dataStr}">
+            <span>${dia}</span>
+            ${qtd > 0 ? `<span class="ponto"></span>` : ''}
+          </button>
+        `;
+      }
+
+      const grid = document.getElementById('calendario-grid');
+      grid.innerHTML = html;
+      grid.querySelectorAll('.calendario-dia:not(.vazio)').forEach((el) => {
+        el.addEventListener('click', () => abrirDia(el.dataset.data));
+      });
+    }
+
+    function abrirDia(dataStr) {
+      const doDia = agendamentosDoDia(dataStr);
+      const dataFmt = new Date(dataStr + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+
+      const html = `
+        <div id="lista-dia-agendamentos" class="lista-cards" style="margin-bottom:16px;"></div>
+        <button type="button" class="botao" id="botao-novo-agendamento-dia">+ Novo agendamento neste dia</button>
+      `;
+      abrirOverlay(dataFmt, html);
+
+      function renderListaDia() {
+        const alvo = document.getElementById('lista-dia-agendamentos');
+        if (doDia.length === 0) {
+          alvo.innerHTML = '<p style="color:var(--cor-texto-fraco);">Nenhum agendamento neste dia.</p>';
+          return;
+        }
+        alvo.innerHTML = doDia.map((ag) => {
+          const podeEditar = ehSocio || Number(ag.usuario_id) === Number(usuarioAtual.id);
+          return `
+            <div class="card-item">
+              <div class="card-item-topo"><h3>${ag.responsavel}</h3></div>
+              <p class="card-item-meta">${ag.horario.slice(0,5)} · R$ ${Number(ag.valor).toFixed(2)} · repasse R$ ${Number(ag.repasse).toFixed(2)} (${Number(ag.percentual)}%)</p>
+              ${podeEditar ? `
+                <div class="card-item-acoes">
+                  <button class="link-acao" data-acao="editar" data-id="${ag.id}">Editar</button>
+                  <button class="link-acao link-acao-erro" data-acao="excluir" data-id="${ag.id}">Excluir</button>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+
+        alvo.querySelectorAll('[data-acao="editar"]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const ag = agendamentos.find((a) => String(a.id) === String(btn.dataset.id));
+            abrirFormularioAgendamento({ dataPreenchida: dataStr, agendamento: ag });
+          });
+        });
+        alvo.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Excluir este agendamento?')) return;
+            try {
+              await api.delete(`/agendamentos/${btn.dataset.id}`);
+              agendamentos = agendamentos.filter((a) => String(a.id) !== String(btn.dataset.id));
+              fecharOverlay();
+              renderCalendario();
+            } catch (err) {
+              alert(err.dados?.erro || 'Erro ao excluir');
+            }
+          });
+        });
+      }
+      renderListaDia();
+
+      document.getElementById('botao-novo-agendamento-dia').addEventListener('click', () => {
+        abrirFormularioAgendamento({ dataPreenchida: dataStr });
+      });
+    }
+
+    function abrirFormularioAgendamento({ dataPreenchida, agendamento } = {}) {
+      const opcoesResidentes = residentes
+        .map((r) => `<option value="${r.id}" ${agendamento && String(agendamento.usuario_id) === String(r.id) ? 'selected' : ''}>${r.nome}</option>`)
+        .join('');
+
+      const corpo = `
+        <div id="erro-agendamento-overlay" class="mensagem-erro"></div>
+        <form id="form-agendamento-overlay">
           ${ehSocio ? `
             <div class="campo">
-              <label for="ag-usuario">Residente</label>
-              <select id="ag-usuario" required>
+              <label for="ag2-usuario">Residente</label>
+              <select id="ag2-usuario" required>
                 <option value="">Selecione...</option>
                 ${opcoesResidentes}
               </select>
             </div>` : ''}
           <div class="linha-campos">
-            <div class="campo">
-              <label for="ag-data">Data</label>
-              <input type="date" id="ag-data" required>
-            </div>
-            <div class="campo">
-              <label for="ag-horario">Horário</label>
-              <input type="time" id="ag-horario" required>
-            </div>
+            <div class="campo"><label for="ag2-data">Data</label><input type="date" id="ag2-data" value="${agendamento ? String(agendamento.data).slice(0,10) : (dataPreenchida || '')}" required></div>
+            <div class="campo"><label for="ag2-horario">Horário</label><input type="time" id="ag2-horario" value="${agendamento ? agendamento.horario.slice(0,5) : ''}" required></div>
           </div>
           <div class="linha-campos">
-            <div class="campo">
-              <label for="ag-duracao">Duração aprox. (min)</label>
-              <input type="number" id="ag-duracao" min="1">
-            </div>
-            <div class="campo">
-              <label for="ag-valor">Valor da tattoo (R$)</label>
-              <input type="number" id="ag-valor" min="100" step="0.01" required>
-            </div>
+            <div class="campo"><label for="ag2-duracao">Duração aprox. (min)</label><input type="number" id="ag2-duracao" min="1" value="${agendamento?.duracao || ''}"></div>
+            <div class="campo"><label for="ag2-valor">Valor da tattoo (R$)</label><input type="number" id="ag2-valor" min="100" step="0.01" value="${agendamento?.valor || ''}" required></div>
           </div>
-          <button type="submit" class="botao">Salvar agendamento</button>
-          <button type="button" class="botao botao-secundario oculto" id="botao-cancelar-edicao">Cancelar edição</button>
+          <button type="submit" class="botao">${agendamento ? 'Salvar alterações' : 'Criar agendamento'}</button>
         </form>
-      </div>
+      `;
+      abrirOverlay(agendamento ? 'Editar agendamento' : 'Novo agendamento', corpo);
 
-      <h3 style="margin-top:32px;">Próximos agendamentos</h3>
-      <div class="tabela-wrapper">
-        <table class="tabela">
-          <thead>
-            <tr><th>Responsável</th><th>Data</th><th>Horário</th><th>Valor</th><th>Repasse</th><th></th></tr>
-          </thead>
-          <tbody id="corpo-tabela-agendamentos"></tbody>
-        </table>
-      </div>
-    `;
+      document.getElementById('form-agendamento-overlay').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-agendamento-overlay');
+        erroEl.classList.remove('visivel');
 
-    function renderTabela() {
-      const corpo = document.getElementById('corpo-tabela-agendamentos');
-      const ordenados = [...agendamentos].sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario));
-      corpo.innerHTML = ordenados.map((ag) => {
-        const podeEditar = ehSocio || Number(ag.usuario_id) === Number(usuarioAtual.id);
-        const dataFmt = new Date(ag.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-        return `
-          <tr>
-            <td>${ag.responsavel}</td>
-            <td>${dataFmt}</td>
-            <td>${ag.horario.slice(0, 5)}</td>
-            <td>R$ ${Number(ag.valor).toFixed(2)}</td>
-            <td>R$ ${Number(ag.repasse).toFixed(2)} (${Number(ag.percentual)}%)</td>
-            <td>
-              ${podeEditar ? `
-                <button class="link-acao" data-acao="editar" data-id="${ag.id}">Editar</button>
-                <button class="link-acao link-acao-erro" data-acao="excluir" data-id="${ag.id}">Excluir</button>
-              ` : ''}
-            </td>
-          </tr>
-        `;
-      }).join('') || '<tr><td colspan="6">Nenhum agendamento ainda.</td></tr>';
+        const corpoReq = {
+          data: document.getElementById('ag2-data').value,
+          horario: document.getElementById('ag2-horario').value,
+          duracao: document.getElementById('ag2-duracao').value || undefined,
+          valor: Number(document.getElementById('ag2-valor').value),
+        };
+        if (ehSocio) corpoReq.usuario_id = document.getElementById('ag2-usuario').value;
 
-      corpo.querySelectorAll('[data-acao="editar"]').forEach((btn) => {
-        btn.addEventListener('click', () => preencherEdicao(btn.dataset.id));
-      });
-      corpo.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
-        btn.addEventListener('click', () => excluirAgendamento(btn.dataset.id));
-      });
-    }
-
-    function preencherEdicao(id) {
-      const ag = agendamentos.find((a) => String(a.id) === String(id));
-      if (!ag) return;
-      document.getElementById('titulo-form-agendamento').textContent = 'Editar agendamento';
-      document.getElementById('ag-id').value = ag.id;
-      document.getElementById('ag-data').value = String(ag.data).slice(0, 10);
-      document.getElementById('ag-horario').value = ag.horario.slice(0, 5);
-      document.getElementById('ag-duracao').value = ag.duracao || '';
-      document.getElementById('ag-valor').value = ag.valor;
-      if (ehSocio) document.getElementById('ag-usuario').value = ag.usuario_id;
-      document.getElementById('botao-cancelar-edicao').classList.remove('oculto');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    document.getElementById('botao-cancelar-edicao').addEventListener('click', () => {
-      document.getElementById('form-agendamento').reset();
-      document.getElementById('ag-id').value = '';
-      document.getElementById('titulo-form-agendamento').textContent = 'Novo agendamento';
-      document.getElementById('botao-cancelar-edicao').classList.add('oculto');
-    });
-
-    async function excluirAgendamento(id) {
-      if (!confirm('Excluir este agendamento?')) return;
-      try {
-        await api.delete(`/agendamentos/${id}`);
-        agendamentos = agendamentos.filter((a) => String(a.id) !== String(id));
-        renderTabela();
-      } catch (err) {
-        alert(err.dados?.erro || 'Erro ao excluir');
-      }
-    }
-
-    document.getElementById('form-agendamento').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-agendamento');
-      erroEl.classList.remove('visivel');
-
-      const id = document.getElementById('ag-id').value;
-      const corpo = {
-        data: document.getElementById('ag-data').value,
-        horario: document.getElementById('ag-horario').value,
-        duracao: document.getElementById('ag-duracao').value || undefined,
-        valor: Number(document.getElementById('ag-valor').value),
-      };
-      if (ehSocio) corpo.usuario_id = document.getElementById('ag-usuario').value;
-
-      try {
-        if (id) {
-          const atualizado = await api.put(`/agendamentos/${id}`, corpo);
-          agendamentos = agendamentos.map((a) => String(a.id) === String(id) ? { ...a, ...atualizado, responsavel: a.responsavel } : a);
-        } else {
-          const criado = await api.post('/agendamentos', corpo);
-          const nomeResponsavel = ehSocio
-            ? (residentes.find((r) => String(r.id) === String(corpo.usuario_id))?.nome || '')
-            : usuarioAtual.nome;
-          agendamentos.push({ ...criado, responsavel: nomeResponsavel });
+        try {
+          if (agendamento) {
+            const atualizado = await api.put(`/agendamentos/${agendamento.id}`, corpoReq);
+            agendamentos = agendamentos.map((a) => String(a.id) === String(agendamento.id) ? { ...a, ...atualizado, responsavel: a.responsavel } : a);
+          } else {
+            const criado = await api.post('/agendamentos', corpoReq);
+            const nomeResponsavel = ehSocio
+              ? (residentes.find((r) => String(r.id) === String(corpoReq.usuario_id))?.nome || '')
+              : usuarioAtual.nome;
+            agendamentos.push({ ...criado, responsavel: nomeResponsavel });
+          }
+          fecharOverlay();
+          renderCalendario();
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao salvar agendamento';
+          erroEl.classList.add('visivel');
         }
-        document.getElementById('form-agendamento').reset();
-        document.getElementById('ag-id').value = '';
-        document.getElementById('titulo-form-agendamento').textContent = 'Novo agendamento';
-        document.getElementById('botao-cancelar-edicao').classList.add('oculto');
-        renderTabela();
-      } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao salvar agendamento';
-        erroEl.classList.add('visivel');
-      }
+      });
+    }
+
+    document.getElementById('cal-mes-anterior').addEventListener('click', () => {
+      mesAtual--;
+      if (mesAtual < 0) { mesAtual = 11; anoAtual--; }
+      renderCalendario();
+    });
+    document.getElementById('cal-mes-proximo').addEventListener('click', () => {
+      mesAtual++;
+      if (mesAtual > 11) { mesAtual = 0; anoAtual++; }
+      renderCalendario();
     });
 
-    renderTabela();
+    renderCalendario();
+    mostrarBotaoFixoRodape('+ Novo agendamento', () => abrirFormularioAgendamento());
   },
 
   async metas(container) {

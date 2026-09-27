@@ -448,6 +448,71 @@ form > .botao { width: 100%; }
 }
 .campo-checkbox input { width: auto; }
 
+/* ---------- Calendário (Agenda) ---------- */
+.calendario-cabecalho-mes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.calendario-cabecalho-mes h3 { margin: 0; font-family: var(--fonte-titulo); font-size: 18px; }
+.calendario-cabecalho-mes button {
+  background: var(--cor-fundo-elevado);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  color: var(--cor-texto);
+  width: 38px;
+  height: 38px;
+  font-size: 18px;
+  cursor: pointer;
+  min-height: auto;
+}
+.calendario-cabecalho-mes button:hover { border-color: var(--cor-acento); color: var(--cor-acento); }
+
+.calendario-dias-semana {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 11px;
+  color: var(--cor-texto-fraco);
+  margin-bottom: 6px;
+}
+
+.calendario-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+.calendario-dia {
+  aspect-ratio: 1;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-fundo-elevado);
+  color: var(--cor-texto);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  min-height: auto;
+  padding: 0;
+  position: relative;
+}
+.calendario-dia:hover { border-color: var(--cor-acento); }
+.calendario-dia.vazio { border: none; background: transparent; cursor: default; }
+.calendario-dia.hoje { border-color: var(--cor-acento); border-width: 2px; font-weight: 700; }
+.calendario-dia .ponto {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--cor-vermelho);
+  position: absolute;
+  bottom: 8px;
+}
+@media (max-width: 480px) {
+  .calendario-dia { font-size: 12px; }
+}
+
 /* ---------- Responsivo ---------- */
 @media (max-width: 768px) {
   .conteudo-principal { padding: 20px 16px 150px; }
