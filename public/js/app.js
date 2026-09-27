@@ -485,40 +485,44 @@ const views = {
         return;
       }
       const nomesStatus = { 1: 'Pendente', 2: 'Aprovado', 3: 'Pago' };
+      const badgeStatus = { 1: 'badge-escarlate', 2: 'badge-roxo', 3: 'badge-verde' };
+
       container.innerHTML = `
         <h2>Benefícios</h2>
-        <div class="tabela-wrapper">
-          <table class="tabela">
-            <thead><tr><th>Residente</th><th>Repasse acumulado</th><th>Benefício</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-              ${resumo.map((r) => `
-                <tr>
-                  <td>${r.nome}</td>
-                  <td>R$ ${Number(r.repasse_acumulado).toFixed(2)}</td>
-                  <td>${r.valor_beneficio ? 'R$ ' + Number(r.valor_beneficio).toFixed(2) : '—'}</td>
-                  <td>${r.status_id ? nomesStatus[r.status_id] : '—'}</td>
-                  <td>
-                    ${r.status_id === 1 ? `<button class="link-acao" data-acao="aprovar" data-id="${r.beneficio_id}">Aprovar</button>` : ''}
-                    ${r.status_id === 2 ? `<button class="link-acao" data-acao="pagar" data-id="${r.beneficio_id}">Marcar como pago</button>` : ''}
-                  </td>
-                </tr>
-              `).join('') || '<tr><td colspan="5">Nenhum benefício este mês.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
+        <div id="lista-beneficios" class="lista-cards"></div>
       `;
-      // Nota: as ações usam o id do benefício, não do usuário.
-      container.querySelectorAll('[data-acao="aprovar"], [data-acao="pagar"]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const statusAlvo = btn.dataset.acao === 'aprovar' ? 2 : 3;
-          try {
-            await api.patch(`/beneficios/${btn.dataset.id}/status`, { status_id: statusAlvo });
-            views.beneficios(container);
-          } catch (err) {
-            alert(err.dados?.erro || 'Erro ao atualizar benefício');
-          }
+
+      function renderResumo() {
+        const alvo = document.getElementById('lista-beneficios');
+        alvo.innerHTML = resumo.map((r) => `
+          <div class="card-item">
+            <div class="card-item-topo">
+              <h3>${r.nome}</h3>
+              ${r.status_id ? `<span class="badge ${badgeStatus[r.status_id]}">${nomesStatus[r.status_id]}</span>` : ''}
+            </div>
+            <p class="card-item-meta">Repasse acumulado: R$ ${Number(r.repasse_acumulado).toFixed(2)}</p>
+            ${r.valor_beneficio ? `<p class="card-item-meta">Benefício: R$ ${Number(r.valor_beneficio).toFixed(2)}</p>` : ''}
+            <div class="card-item-acoes">
+              ${r.status_id === 1 ? `<button class="link-acao" data-acao="aprovar" data-id="${r.beneficio_id}">Aprovar</button>` : ''}
+              ${r.status_id === 2 ? `<button class="link-acao" data-acao="pagar" data-id="${r.beneficio_id}">Marcar como pago</button>` : ''}
+            </div>
+          </div>
+        `).join('') || '<p style="color:var(--cor-texto-fraco);">Nenhum residente ativo.</p>';
+
+        alvo.querySelectorAll('[data-acao="aprovar"], [data-acao="pagar"]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const statusAlvo = btn.dataset.acao === 'aprovar' ? 2 : 3;
+            try {
+              await api.patch(`/beneficios/${btn.dataset.id}/status`, { status_id: statusAlvo });
+              views.beneficios(container);
+            } catch (err) {
+              alert(err.dados?.erro || 'Erro ao atualizar benefício');
+            }
+          });
         });
-      });
+      }
+
+      renderResumo();
       return;
     }
 
@@ -530,41 +534,42 @@ const views = {
 
     container.innerHTML = `
       <h2>Benefícios</h2>
-      <div class="painel-form" style="max-width:420px;">
-        <p style="color:var(--cor-texto-fraco); margin-top:0;">Escolha a categoria do seu benefício deste mês. Só é possível uma solicitação por mês.</p>
-        <div id="erro-beneficio" class="mensagem-erro"></div>
-        <div id="sucesso-beneficio" class="mensagem-sucesso oculto"></div>
-        <form id="form-beneficio">
+      <div id="msg-beneficio-residente"></div>
+      <p style="color:var(--cor-texto-fraco);">Use o botão abaixo para solicitar o benefício do mês (só é possível uma solicitação por mês).</p>
+    `;
+
+    function abrirFormularioSolicitar() {
+      const corpo = `
+        <div id="erro-beneficio-overlay" class="mensagem-erro"></div>
+        <form id="form-beneficio-overlay">
           <div class="campo">
-            <label for="beneficio-categoria">Categoria</label>
-            <select id="beneficio-categoria" required>
+            <label for="ben2-categoria">Categoria</label>
+            <select id="ben2-categoria" required>
               <option value="">Selecione...</option>
               ${categorias.map((c) => `<option value="${c.id}">${c.nome}</option>`).join('')}
             </select>
           </div>
           <button type="submit" class="botao">Solicitar benefício do mês</button>
         </form>
-      </div>
-    `;
+      `;
+      abrirOverlay('Solicitar benefício', corpo);
 
-    document.getElementById('form-beneficio').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-beneficio');
-      const sucessoEl = document.getElementById('sucesso-beneficio');
-      erroEl.classList.remove('visivel');
-      sucessoEl.classList.add('oculto');
+      document.getElementById('form-beneficio-overlay').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-beneficio-overlay');
+        erroEl.classList.remove('visivel');
+        try {
+          const resultado = await api.post('/beneficios/solicitar', { categoria_id: document.getElementById('ben2-categoria').value });
+          fecharOverlay();
+          document.getElementById('msg-beneficio-residente').innerHTML = `<p class="mensagem-sucesso">Benefício solicitado: R$ ${Number(resultado.valor).toFixed(2)}. Aguarde aprovação do sócio.</p>`;
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao solicitar benefício';
+          erroEl.classList.add('visivel');
+        }
+      });
+    }
 
-      const categoria_id = document.getElementById('beneficio-categoria').value;
-      try {
-        const resultado = await api.post('/beneficios/solicitar', { categoria_id });
-        sucessoEl.textContent = `Benefício solicitado: R$ ${Number(resultado.valor).toFixed(2)}. Aguarde aprovação do sócio.`;
-        sucessoEl.classList.remove('oculto');
-        document.getElementById('form-beneficio').reset();
-      } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao solicitar benefício';
-        erroEl.classList.add('visivel');
-      }
-    });
+    mostrarBotaoFixoRodape('+ Solicitar benefício', abrirFormularioSolicitar);
   },
 
   async estoque(container) {
@@ -712,226 +717,200 @@ const views = {
     }
 
     const hoje = new Date();
-    const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+    let mesIdx = hoje.getMonth();
+    let ano = hoje.getFullYear();
+    const nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const nomesCategoria = { 1: 'Operacional', 2: 'Materiais', 3: 'Benefícios', 4: 'Marketing', 5: 'Melhorias' };
+    const nomesTipoLancamento = { 1: 'Entrada', 2: 'Gasto', 3: 'Ajuste' };
+
+    function mesRef() { return `${ano}-${String(mesIdx + 1).padStart(2, '0')}`; }
 
     container.innerHTML = `
       <h2>Financeiro</h2>
-      <div class="campo" style="max-width:200px;">
-        <label for="fin-mes">Mês de referência</label>
-        <input type="month" id="fin-mes" value="${mesAtual}">
+      <div class="calendario-cabecalho-mes" style="max-width:340px;">
+        <button type="button" id="fin-mes-anterior" aria-label="Mês anterior">&#8249;</button>
+        <h3 id="fin-mes-label"></h3>
+        <button type="button" id="fin-mes-proximo" aria-label="Próximo mês">&#8250;</button>
       </div>
 
-      <div class="linha-campos" style="align-items:flex-start;">
-        <div class="painel-form" style="flex:1;">
-          <h3>Nova entrada</h3>
-          <div id="erro-entrada" class="mensagem-erro"></div>
-          <form id="form-entrada">
-            <div class="campo"><label for="ent-valor">Valor (R$)</label><input type="number" id="ent-valor" min="0.01" step="0.01" required></div>
-            <div class="campo"><label for="ent-desc">Descrição (opcional)</label><input type="text" id="ent-desc"></div>
-            <button type="submit" class="botao">Registrar entrada</button>
-          </form>
-        </div>
-
-        <div class="painel-form" style="flex:1;">
-          <h3>Orçamento do mês</h3>
-          <div id="erro-orcamento" class="mensagem-erro"></div>
-          <form id="form-orcamento">
-            <div class="campo">
-              <label for="orc-categoria">Categoria</label>
-              <select id="orc-categoria" required>
-                <option value="1">Operacional</option>
-                <option value="2">Materiais</option>
-              </select>
-            </div>
-            <div class="campo"><label for="orc-valor">Valor (R$)</label><input type="number" id="orc-valor" min="0" step="0.01" required></div>
-            <button type="submit" class="botao">Definir orçamento</button>
-          </form>
-        </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0 20px;">
+        <button type="button" class="botao-secundario" id="fin-botao-fechar" style="width:auto;">Fechar mês</button>
+        <button type="button" class="botao-secundario" id="fin-botao-reabrir" style="width:auto;">Reabrir mês</button>
       </div>
 
-      <div class="painel-form" style="max-width:520px; margin-top:20px;">
-        <h3>Lançar gasto</h3>
-        <div id="erro-gasto" class="mensagem-erro"></div>
-        <form id="form-gasto">
-          <div class="linha-campos">
-            <div class="campo">
-              <label for="gasto-categoria">Categoria</label>
-              <select id="gasto-categoria" required>
-                <option value="1">Operacional</option>
-                <option value="2">Materiais</option>
-                <option value="3">Benefícios</option>
-                <option value="4">Marketing</option>
-                <option value="5">Melhorias</option>
-              </select>
-            </div>
-            <div class="campo"><label for="gasto-valor">Valor (R$)</label><input type="number" id="gasto-valor" min="0.01" step="0.01" required></div>
-          </div>
-          <div class="campo"><label for="gasto-desc">Descrição</label><input type="text" id="gasto-desc"></div>
-          <button type="submit" class="botao">Registrar gasto</button>
-        </form>
-      </div>
+      <div id="fin-resumo" class="painel-form" style="max-width:640px; margin-bottom:20px;"></div>
 
-      <div class="painel-form" style="max-width:640px; margin-top:20px;">
-        <h3>Fechamento do mês</h3>
-        <div id="area-preview"></div>
-        <button class="botao botao-secundario" id="botao-preview">Ver preview do fechamento</button>
-        <button class="botao" id="botao-fechar">Fechar mês</button>
-        <div class="campo" style="margin-top:12px;">
-          <label for="fin-motivo-reabrir">Motivo (para reabrir mês fechado)</label>
-          <input type="text" id="fin-motivo-reabrir" placeholder="Ex: ajuste de lançamento">
-        </div>
-        <button class="botao botao-secundario" id="botao-reabrir">Reabrir mês</button>
-        <div id="msg-fechamento" style="margin-top:12px;"></div>
-      </div>
+      <h3>Saldos por categoria</h3>
+      <div id="fin-saldos" class="lista-cards" style="margin-bottom:24px;"></div>
 
-      <h3 style="margin-top:24px;">Saldos do mês</h3>
-      <div class="tabela-wrapper">
-        <table class="tabela">
-          <thead><tr><th>Categoria</th><th>Saldo inicial</th><th>Destinação</th><th>Gastos</th><th>Saldo final</th></tr></thead>
-          <tbody id="corpo-saldos"><tr><td colspan="5">Clique em "Ver saldos" para carregar.</td></tr></tbody>
-        </table>
-      </div>
-      <button class="botao botao-secundario" id="botao-ver-saldos">Ver saldos</button>
-
-      <h3 style="margin-top:24px;">Lançamentos do mês</h3>
-      <div class="tabela-wrapper">
-        <table class="tabela">
-          <thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Valor</th><th>Descrição</th><th>Usuário</th></tr></thead>
-          <tbody id="corpo-lancamentos"><tr><td colspan="6">Clique em "Ver lançamentos" para carregar.</td></tr></tbody>
-        </table>
-      </div>
-      <button class="botao botao-secundario" id="botao-ver-lancamentos">Ver lançamentos</button>
+      <h3>Lançamentos do mês</h3>
+      <div id="fin-lancamentos" class="lista-cards"></div>
     `;
 
-    function mesSelecionado() {
-      return document.getElementById('fin-mes').value;
+    async function carregarTudo() {
+      document.getElementById('fin-mes-label').textContent = `${nomesMes[mesIdx]} de ${ano}`;
+      document.getElementById('fin-resumo').innerHTML = '<p style="color:var(--cor-texto-fraco); margin:0;">Carregando...</p>';
+      document.getElementById('fin-saldos').innerHTML = '';
+      document.getElementById('fin-lancamentos').innerHTML = '';
+
+      try {
+        const preview = await api.get(`/financeiro/fechamento/${mesRef()}/preview`);
+        document.getElementById('fin-resumo').innerHTML = `
+          <h3 style="margin-top:0;">Resumo do mês</h3>
+          <p style="font-size:14px; line-height:1.9; margin:0;">
+            Entradas (E): <strong>R$ ${preview.E.toFixed(2)}</strong><br>
+            Operacional (O): R$ ${preview.O.toFixed(2)} · Materiais (M): R$ ${preview.M.toFixed(2)}<br>
+            Benefícios (B): R$ ${preview.B.toFixed(2)} · Marketing (K): R$ ${preview.K.toFixed(2)}<br>
+            Melhorias (I): <strong>R$ ${preview.I.toFixed(2)}</strong>
+          </p>
+        `;
+      } catch (err) {
+        document.getElementById('fin-resumo').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao calcular resumo'}</div>`;
+      }
+
+      try {
+        const saldos = await api.get(`/financeiro/saldos/${mesRef()}`);
+        document.getElementById('fin-saldos').innerHTML = saldos.map((s) => `
+          <div class="card-item">
+            <div class="card-item-topo"><h3>${s.nome}</h3></div>
+            <p class="card-item-meta">Inicial: R$ ${Number(s.saldo_inicial).toFixed(2)} · Destinação: R$ ${Number(s.destinacao).toFixed(2)} · Gastos: R$ ${Number(s.gastos).toFixed(2)}</p>
+            <p style="margin:6px 0 0; font-weight:600;">Saldo final: R$ ${Number(s.saldo_final).toFixed(2)}</p>
+          </div>
+        `).join('') || '<p style="color:var(--cor-texto-fraco);">Mês ainda não fechado.</p>';
+      } catch (err) {
+        document.getElementById('fin-saldos').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao carregar saldos'}</div>`;
+      }
+
+      try {
+        const lancamentos = await api.get(`/financeiro/lancamentos/${mesRef()}`);
+        document.getElementById('fin-lancamentos').innerHTML = lancamentos.map((l) => `
+          <div class="card-item">
+            <div class="card-item-topo"><h3>${nomesTipoLancamento[l.tipo_id]}${l.categoria ? ' · ' + l.categoria : ''}</h3></div>
+            <p class="card-item-meta">${new Date(l.created_at).toLocaleDateString('pt-BR')} · ${l.usuario_nome}${l.descricao ? ' · ' + l.descricao : ''}</p>
+            <p style="margin:6px 0 0; font-weight:600;">R$ ${Number(l.valor).toFixed(2)}</p>
+          </div>
+        `).join('') || '<p style="color:var(--cor-texto-fraco);">Nenhum lançamento neste mês.</p>';
+      } catch (err) {
+        document.getElementById('fin-lancamentos').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao carregar lançamentos'}</div>`;
+      }
     }
 
-    document.getElementById('form-entrada').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-entrada');
-      erroEl.classList.remove('visivel');
+    function categoriasParaTipo(tipo) {
+      if (tipo === 'orcamento') return [1, 2];
+      return [1, 2, 3, 4, 5];
+    }
+
+    function abrirFormularioLancamento() {
+      const corpo = `
+        <div id="erro-lancamento-overlay" class="mensagem-erro"></div>
+        <form id="form-lancamento-overlay">
+          <div class="campo">
+            <label for="fl-tipo">O que deseja registrar?</label>
+            <select id="fl-tipo" required>
+              <option value="entrada">Entrada de caixa</option>
+              <option value="orcamento">Orçamento (Operacional/Materiais)</option>
+              <option value="gasto">Gasto em categoria</option>
+            </select>
+          </div>
+          <div class="campo" id="fl-categoria-wrapper">
+            <label for="fl-categoria">Categoria</label>
+            <select id="fl-categoria"></select>
+          </div>
+          <div class="campo"><label for="fl-valor">Valor (R$)</label><input type="number" id="fl-valor" min="0.01" step="0.01" required></div>
+          <div class="campo" id="fl-desc-wrapper"><label for="fl-desc">Descrição (opcional)</label><input type="text" id="fl-desc"></div>
+          <button type="submit" class="botao">Registrar</button>
+        </form>
+      `;
+      abrirOverlay(`Novo lançamento — ${nomesMes[mesIdx]}/${ano}`, corpo);
+
+      function atualizarCategorias() {
+        const tipo = document.getElementById('fl-tipo').value;
+        const wrapper = document.getElementById('fl-categoria-wrapper');
+        if (tipo === 'entrada') {
+          wrapper.classList.add('oculto');
+        } else {
+          wrapper.classList.remove('oculto');
+          const sel = document.getElementById('fl-categoria');
+          sel.innerHTML = categoriasParaTipo(tipo).map((id) => `<option value="${id}">${nomesCategoria[id]}</option>`).join('');
+        }
+        document.getElementById('fl-desc-wrapper').classList.toggle('oculto', tipo === 'orcamento');
+      }
+      atualizarCategorias();
+      document.getElementById('fl-tipo').addEventListener('change', atualizarCategorias);
+
+      document.getElementById('form-lancamento-overlay').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-lancamento-overlay');
+        erroEl.classList.remove('visivel');
+        const tipo = document.getElementById('fl-tipo').value;
+        const valor = Number(document.getElementById('fl-valor').value);
+        const descricao = document.getElementById('fl-desc').value || undefined;
+        const categoria_id = Number(document.getElementById('fl-categoria')?.value);
+
+        try {
+          if (tipo === 'entrada') {
+            await api.post('/financeiro/entradas', { mes: mesRef(), valor, descricao });
+          } else if (tipo === 'orcamento') {
+            await api.post('/financeiro/orcamentos', { categoria_id, mes: mesRef(), valor });
+          } else {
+            await api.post('/financeiro/gastos', { categoria_id, mes: mesRef(), valor, descricao });
+          }
+          fecharOverlay();
+          carregarTudo();
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao registrar';
+          erroEl.classList.add('visivel');
+        }
+      });
+    }
+
+    document.getElementById('fin-mes-anterior').addEventListener('click', () => {
+      mesIdx--; if (mesIdx < 0) { mesIdx = 11; ano--; }
+      carregarTudo();
+    });
+    document.getElementById('fin-mes-proximo').addEventListener('click', () => {
+      mesIdx++; if (mesIdx > 11) { mesIdx = 0; ano++; }
+      carregarTudo();
+    });
+
+    document.getElementById('fin-botao-fechar').addEventListener('click', async () => {
+      if (!confirm(`Fechar o mês ${nomesMes[mesIdx]}/${ano}?`)) return;
       try {
-        await api.post('/financeiro/entradas', {
-          mes: mesSelecionado(),
-          valor: Number(document.getElementById('ent-valor').value),
-          descricao: document.getElementById('ent-desc').value || undefined,
-        });
-        document.getElementById('form-entrada').reset();
-        alert('Entrada registrada.');
+        await api.post(`/financeiro/fechamento/${mesRef()}/fechar`);
+        carregarTudo();
       } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao registrar entrada';
-        erroEl.classList.add('visivel');
+        alert(err.dados?.erro || 'Erro ao fechar mês');
       }
     });
 
-    document.getElementById('form-orcamento').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-orcamento');
-      erroEl.classList.remove('visivel');
-      try {
-        await api.post('/financeiro/orcamentos', {
-          categoria_id: Number(document.getElementById('orc-categoria').value),
-          mes: mesSelecionado(),
-          valor: Number(document.getElementById('orc-valor').value),
-        });
-        document.getElementById('form-orcamento').reset();
-        alert('Orçamento definido.');
-      } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao definir orçamento';
-        erroEl.classList.add('visivel');
-      }
+    document.getElementById('fin-botao-reabrir').addEventListener('click', () => {
+      const corpo = `
+        <div id="erro-reabrir-overlay" class="mensagem-erro"></div>
+        <form id="form-reabrir-overlay">
+          <div class="campo"><label for="reab-motivo">Motivo da reabertura</label><input type="text" id="reab-motivo" required></div>
+          <button type="submit" class="botao">Reabrir mês</button>
+        </form>
+      `;
+      abrirOverlay(`Reabrir ${nomesMes[mesIdx]}/${ano}`, corpo);
+      document.getElementById('form-reabrir-overlay').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-reabrir-overlay');
+        erroEl.classList.remove('visivel');
+        try {
+          await api.post(`/financeiro/fechamento/${mesRef()}/reabrir`, { motivo: document.getElementById('reab-motivo').value.trim() });
+          fecharOverlay();
+          carregarTudo();
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao reabrir mês';
+          erroEl.classList.add('visivel');
+        }
+      });
     });
 
-    document.getElementById('form-gasto').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-gasto');
-      erroEl.classList.remove('visivel');
-      try {
-        await api.post('/financeiro/gastos', {
-          categoria_id: Number(document.getElementById('gasto-categoria').value),
-          mes: mesSelecionado(),
-          valor: Number(document.getElementById('gasto-valor').value),
-          descricao: document.getElementById('gasto-desc').value || undefined,
-        });
-        document.getElementById('form-gasto').reset();
-        alert('Gasto registrado.');
-      } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao registrar gasto';
-        erroEl.classList.add('visivel');
-      }
-    });
-
-    document.getElementById('botao-preview').addEventListener('click', async () => {
-      try {
-        const p = await api.get(`/financeiro/fechamento/${mesSelecionado()}/preview`);
-        document.getElementById('area-preview').innerHTML = `
-          <p style="font-size:13px; color:var(--cor-texto-fraco);">
-            E: R$ ${p.E.toFixed(2)} · O: R$ ${p.O.toFixed(2)} · M: R$ ${p.M.toFixed(2)} ·
-            B: R$ ${p.B.toFixed(2)} · K: R$ ${p.K.toFixed(2)} · I (Melhorias): R$ ${p.I.toFixed(2)}
-          </p>`;
-      } catch (err) {
-        alert(err.dados?.erro || 'Erro ao gerar preview');
-      }
-    });
-
-    document.getElementById('botao-fechar').addEventListener('click', async () => {
-      if (!confirm(`Fechar o mês ${mesSelecionado()}?`)) return;
-      try {
-        await api.post(`/financeiro/fechamento/${mesSelecionado()}/fechar`);
-        document.getElementById('msg-fechamento').innerHTML = '<p class="mensagem-sucesso">Mês fechado com sucesso.</p>';
-      } catch (err) {
-        document.getElementById('msg-fechamento').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao fechar mês'}</div>`;
-      }
-    });
-
-    document.getElementById('botao-reabrir').addEventListener('click', async () => {
-      const motivo = document.getElementById('fin-motivo-reabrir').value.trim();
-      if (!motivo) return alert('Informe o motivo da reabertura.');
-      try {
-        await api.post(`/financeiro/fechamento/${mesSelecionado()}/reabrir`, { motivo });
-        document.getElementById('msg-fechamento').innerHTML = '<p class="mensagem-sucesso">Mês reaberto.</p>';
-      } catch (err) {
-        document.getElementById('msg-fechamento').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao reabrir mês'}</div>`;
-      }
-    });
-
-    document.getElementById('botao-ver-saldos').addEventListener('click', async () => {
-      try {
-        const saldos = await api.get(`/financeiro/saldos/${mesSelecionado()}`);
-        document.getElementById('corpo-saldos').innerHTML = saldos.map((s) => `
-          <tr>
-            <td>${s.nome}</td>
-            <td>R$ ${Number(s.saldo_inicial).toFixed(2)}</td>
-            <td>R$ ${Number(s.destinacao).toFixed(2)}</td>
-            <td>R$ ${Number(s.gastos).toFixed(2)}</td>
-            <td>R$ ${Number(s.saldo_final).toFixed(2)}</td>
-          </tr>
-        `).join('') || '<tr><td colspan="5">Mês ainda não fechado.</td></tr>';
-      } catch (err) {
-        alert(err.dados?.erro || 'Erro ao carregar saldos');
-      }
-    });
-
-    document.getElementById('botao-ver-lancamentos').addEventListener('click', async () => {
-      try {
-        const lancamentos = await api.get(`/financeiro/lancamentos/${mesSelecionado()}`);
-        const nomesTipo = { 1: 'Entrada', 2: 'Gasto', 3: 'Ajuste' };
-        document.getElementById('corpo-lancamentos').innerHTML = lancamentos.map((l) => `
-          <tr>
-            <td>${new Date(l.created_at).toLocaleDateString('pt-BR')}</td>
-            <td>${nomesTipo[l.tipo_id]}</td>
-            <td>${l.categoria || '—'}</td>
-            <td>R$ ${Number(l.valor).toFixed(2)}</td>
-            <td>${l.descricao || '—'}</td>
-            <td>${l.usuario_nome}</td>
-          </tr>
-        `).join('') || '<tr><td colspan="6">Nenhum lançamento neste mês.</td></tr>';
-      } catch (err) {
-        alert(err.dados?.erro || 'Erro ao carregar lançamentos');
-      }
-    });
+    carregarTudo();
+    mostrarBotaoFixoRodape('+ Novo lançamento', abrirFormularioLancamento);
   },
+
 
   async melhorias(container) {
     container.innerHTML = '<h2>Melhorias</h2><p>Carregando...</p>';
@@ -963,7 +942,7 @@ const views = {
           <div class="barra-progresso"><div class="barra-progresso-preenchida" style="width:${Math.min(100, atual.progresso_percentual)}%"></div></div>
           <p style="margin-top:12px; color:var(--cor-texto-fraco);">
             R$ ${Number(atual.valor_acumulado).toFixed(2)} de R$ ${Number(atual.valor_alvo).toFixed(2)}
-            ${atual.estado === 'meta_atingida' ? '<span class="mensagem-sucesso" style="display:inline; padding:2px 6px; margin-left:8px;">meta atingida</span>' : ''}
+            ${atual.estado === 'meta_atingida' ? '<span class="badge badge-verde" style="margin-left:8px;">meta atingida</span>' : ''}
           </p>
           ${atual.ultima_melhoria_adquirida ? `<p style="margin-top:16px; font-size:13px; color:var(--cor-texto-fraco);">Última adquirida: ${atual.ultima_melhoria_adquirida.nome}</p>` : ''}
         </div>
@@ -981,86 +960,37 @@ const views = {
     }
 
     const nomesEstado = { em_progresso: 'Em progresso', meta_atingida: 'Meta atingida', finalizada: 'Finalizada' };
+    const badgeEstado = { em_progresso: '', meta_atingida: 'badge-verde', finalizada: 'badge-roxo' };
 
     container.innerHTML = `
       <h2>Melhorias</h2>
-      <div class="painel-form" style="max-width:420px; margin-bottom:24px;">
-        <h3>Adicionar à fila</h3>
-        <div id="erro-melhoria" class="mensagem-erro"></div>
-        <form id="form-melhoria">
-          <div class="campo"><label for="mel-nome">Nome</label><input type="text" id="mel-nome" required></div>
-          <div class="linha-campos">
-            <div class="campo"><label for="mel-valor">Valor-alvo (R$)</label><input type="number" id="mel-valor" min="1" step="0.01" required></div>
-            <div class="campo"><label for="mel-prioridade">Prioridade</label><input type="number" id="mel-prioridade" min="1" required></div>
-          </div>
-          <button type="submit" class="botao">Adicionar</button>
-        </form>
-      </div>
-
-      <h3>Fila</h3>
-      <div class="tabela-wrapper">
-        <table class="tabela">
-          <thead><tr><th>Prioridade</th><th>Nome</th><th>Valor-alvo</th><th>Estado</th><th></th></tr></thead>
-          <tbody id="corpo-melhorias"></tbody>
-        </table>
-      </div>
+      <div id="lista-melhorias" class="lista-cards"></div>
     `;
 
     function renderFila() {
-      document.getElementById('corpo-melhorias').innerHTML = fila
-        .sort((a, b) => a.prioridade - b.prioridade)
-        .map((m) => `
-          <tr>
-            <td><input type="number" class="input-prioridade" data-id="${m.id}" value="${m.prioridade}" style="width:60px;"></td>
-            <td>${m.nome}</td>
-            <td><input type="number" class="input-valor-alvo" data-id="${m.id}" value="${m.valor_alvo}" step="0.01" style="width:100px;"></td>
-            <td>${nomesEstado[m.estado]}</td>
-            <td>
-              ${m.estado !== 'finalizada' ? `<button class="link-acao" data-acao="finalizar" data-id="${m.id}">Finalizar</button>` : ''}
-              ${m.estado === 'em_progresso' ? `<button class="link-acao link-acao-erro" data-acao="excluir" data-id="${m.id}">Excluir</button>` : ''}
-            </td>
-          </tr>
-        `).join('') || '<tr><td colspan="5">Fila vazia.</td></tr>';
+      const alvo = document.getElementById('lista-melhorias');
+      alvo.innerHTML = [...fila].sort((a, b) => a.prioridade - b.prioridade).map((m) => `
+        <div class="card-item">
+          <div class="card-item-topo">
+            <h3>${m.prioridade}º · ${m.nome}</h3>
+            <span class="badge ${badgeEstado[m.estado]}" ${!badgeEstado[m.estado] ? 'style="background:rgba(255,255,255,0.08); border:1px solid var(--cor-borda); color:var(--cor-texto-fraco);"' : ''}>${nomesEstado[m.estado]}</span>
+          </div>
+          <p class="card-item-meta">Valor-alvo: R$ ${Number(m.valor_alvo).toFixed(2)}</p>
+          <div class="card-item-acoes">
+            ${m.estado !== 'finalizada' ? `<button class="link-acao" data-acao="editar" data-id="${m.id}">Editar</button>` : ''}
+            ${m.estado !== 'finalizada' ? `<button class="link-acao" data-acao="finalizar" data-id="${m.id}">Finalizar</button>` : ''}
+            ${m.estado === 'em_progresso' ? `<button class="link-acao link-acao-erro" data-acao="excluir" data-id="${m.id}">Excluir</button>` : ''}
+          </div>
+        </div>
+      `).join('') || '<p style="color:var(--cor-texto-fraco);">Fila vazia.</p>';
 
-      document.querySelectorAll('.input-prioridade').forEach((input) => {
-        input.addEventListener('change', async () => {
-          try {
-            await api.patch(`/melhorias/${input.dataset.id}/prioridade`, { prioridade: Number(input.value) });
-            views.melhorias(container);
-          } catch (err) {
-            alert(err.dados?.erro || 'Erro ao alterar prioridade');
-          }
-        });
+      alvo.querySelectorAll('[data-acao="editar"]').forEach((btn) => {
+        btn.addEventListener('click', () => abrirFormularioMelhoria({ modo: 'editar', melhoria: fila.find((m) => String(m.id) === String(btn.dataset.id)) }));
       });
-
-      document.querySelectorAll('.input-valor-alvo').forEach((input) => {
-        input.addEventListener('change', async () => {
-          try {
-            await api.patch(`/melhorias/${input.dataset.id}/valor-alvo`, { valor_alvo: Number(input.value) });
-            views.melhorias(container);
-          } catch (err) {
-            alert(err.dados?.erro || 'Erro ao alterar valor-alvo');
-          }
-        });
+      alvo.querySelectorAll('[data-acao="finalizar"]').forEach((btn) => {
+        btn.addEventListener('click', () => abrirFormularioFinalizar(btn.dataset.id));
       });
-
-      document.querySelectorAll('[data-acao="finalizar"]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const valor_gasto = prompt('Valor efetivamente gasto (R$):');
-          if (!valor_gasto) return;
-          const mes = prompt('Mês de competência do gasto (AAAA-MM):', new Date().toISOString().slice(0, 7));
-          if (!mes) return;
-          try {
-            await api.post(`/melhorias/${btn.dataset.id}/finalizar`, { valor_gasto: Number(valor_gasto), mes });
-            alert('Melhoria finalizada. Lembre-se de fechar/reabrir o mês no Financeiro para o saldo refletir o gasto.');
-            views.melhorias(container);
-          } catch (err) {
-            alert(err.dados?.erro || 'Erro ao finalizar melhoria');
-          }
-        });
-      });
-
-      document.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
+      alvo.querySelectorAll('[data-acao="excluir"]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           if (!confirm('Remover este item da fila?')) return;
           try {
@@ -1074,27 +1004,81 @@ const views = {
       });
     }
 
-    document.getElementById('form-melhoria').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-melhoria');
-      erroEl.classList.remove('visivel');
-      try {
-        const criada = await api.post('/melhorias', {
-          nome: document.getElementById('mel-nome').value.trim(),
-          valor_alvo: Number(document.getElementById('mel-valor').value),
-          prioridade: Number(document.getElementById('mel-prioridade').value),
-        });
-        fila.push({ ...criada, estado: 'em_progresso' });
-        document.getElementById('form-melhoria').reset();
-        renderFila();
-      } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao adicionar melhoria';
-        erroEl.classList.add('visivel');
-      }
-    });
+    function abrirFormularioMelhoria({ modo, melhoria } = { modo: 'criar' }) {
+      const corpo = `
+        <div id="erro-melhoria-overlay" class="mensagem-erro"></div>
+        <form id="form-melhoria-overlay">
+          ${modo === 'criar' ? `<div class="campo"><label for="mel2-nome">Nome</label><input type="text" id="mel2-nome" required></div>` : ''}
+          <div class="linha-campos">
+            <div class="campo"><label for="mel2-valor">Valor-alvo (R$)</label><input type="number" id="mel2-valor" min="1" step="0.01" value="${melhoria?.valor_alvo || ''}" required></div>
+            <div class="campo"><label for="mel2-prioridade">Prioridade</label><input type="number" id="mel2-prioridade" min="1" value="${melhoria?.prioridade || ''}" required></div>
+          </div>
+          <button type="submit" class="botao">${modo === 'criar' ? 'Adicionar' : 'Salvar alterações'}</button>
+        </form>
+      `;
+      abrirOverlay(modo === 'criar' ? 'Adicionar à fila' : 'Editar melhoria', corpo);
+
+      document.getElementById('form-melhoria-overlay').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-melhoria-overlay');
+        erroEl.classList.remove('visivel');
+        try {
+          if (modo === 'criar') {
+            const criada = await api.post('/melhorias', {
+              nome: document.getElementById('mel2-nome').value.trim(),
+              valor_alvo: Number(document.getElementById('mel2-valor').value),
+              prioridade: Number(document.getElementById('mel2-prioridade').value),
+            });
+            fila.push({ ...criada, estado: 'em_progresso' });
+          } else {
+            await api.patch(`/melhorias/${melhoria.id}/valor-alvo`, { valor_alvo: Number(document.getElementById('mel2-valor').value) });
+            await api.patch(`/melhorias/${melhoria.id}/prioridade`, { prioridade: Number(document.getElementById('mel2-prioridade').value) });
+            fila = await api.get('/melhorias');
+          }
+          fecharOverlay();
+          renderFila();
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao salvar';
+          erroEl.classList.add('visivel');
+        }
+      });
+    }
+
+    function abrirFormularioFinalizar(id) {
+      const corpo = `
+        <div id="erro-finalizar-overlay" class="mensagem-erro"></div>
+        <form id="form-finalizar-overlay">
+          <div class="campo"><label for="fin2-valor">Valor efetivamente gasto (R$)</label><input type="number" id="fin2-valor" min="0.01" step="0.01" required></div>
+          <div class="campo"><label for="fin2-mes">Mês de competência do gasto</label><input type="month" id="fin2-mes" value="${new Date().toISOString().slice(0,7)}" required></div>
+          <button type="submit" class="botao">Finalizar melhoria</button>
+        </form>
+      `;
+      abrirOverlay('Finalizar melhoria', corpo);
+
+      document.getElementById('form-finalizar-overlay').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const erroEl = document.getElementById('erro-finalizar-overlay');
+        erroEl.classList.remove('visivel');
+        try {
+          await api.post(`/melhorias/${id}/finalizar`, {
+            valor_gasto: Number(document.getElementById('fin2-valor').value),
+            mes: document.getElementById('fin2-mes').value,
+          });
+          fecharOverlay();
+          alert('Melhoria finalizada. Lembre-se de fechar/reabrir o mês no Financeiro para o saldo refletir o gasto.');
+          fila = await api.get('/melhorias');
+          renderFila();
+        } catch (err) {
+          erroEl.textContent = err.dados?.erro || 'Erro ao finalizar';
+          erroEl.classList.add('visivel');
+        }
+      });
+    }
 
     renderFila();
+    mostrarBotaoFixoRodape('+ Adicionar melhoria', () => abrirFormularioMelhoria({ modo: 'criar' }));
   },
+
 
   async comunicados(container) {
     container.innerHTML = '<h2>Comunicados</h2><p>Carregando...</p>';
