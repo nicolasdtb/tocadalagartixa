@@ -513,6 +513,26 @@ form > .botao { width: 100%; }
   .calendario-dia { font-size: 12px; }
 }
 
+.botao-info-canto {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(124,58,237,0.15);
+  border: 1px solid var(--cor-acento);
+  color: var(--cor-acento);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: auto;
+  padding: 0;
+}
+.botao-info-canto svg { width: 18px; height: 18px; }
+.botao-info-canto:hover { background: rgba(124,58,237,0.28); }
+
 /* ---------- Responsivo ---------- */
 @media (max-width: 768px) {
   .conteudo-principal { padding: 20px 16px 150px; }

@@ -431,8 +431,11 @@ const views = {
       : Math.min(100, (meta.acumulado_mes / Number(meta.proximo_nivel.repasse_minimo)) * 100);
 
     container.innerHTML = `
-      <h2>Minha Meta <button class="link-acao" id="botao-ver-niveis" title="Ver todos os níveis">?</button></h2>
-      <div class="painel-form" style="max-width:480px;">
+      <h2>Minha Meta</h2>
+      <div class="painel-form" style="max-width:480px; position:relative;">
+        <button class="botao-info-canto" id="botao-ver-niveis" title="Ver todos os níveis" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 1.8-2.5 3.5"/><circle cx="12" cy="16.7" r="0.6" fill="currentColor"/></svg>
+        </button>
         <p style="color:var(--cor-texto-fraco); margin-top:0;">Repasse acumulado este mês</p>
         <p style="font-size:32px; font-family: var(--fonte-titulo); margin:0 0 16px;">R$ ${Number(meta.acumulado_mes).toFixed(2)}</p>
 
@@ -447,28 +450,19 @@ const views = {
           </p>
         `}
       </div>
-
-      <div id="modal-niveis" class="modal oculto">
-        <div class="modal-conteudo">
-          <h3>Todos os níveis</h3>
-          <table class="tabela">
-            <thead><tr><th>Nível</th><th>Repasse mínimo</th><th>Benefício</th></tr></thead>
-            <tbody id="corpo-niveis"></tbody>
-          </table>
-          <button class="botao botao-secundario" id="botao-fechar-niveis">Fechar</button>
-        </div>
-      </div>
     `;
 
     document.getElementById('botao-ver-niveis').addEventListener('click', async () => {
       const niveis = await api.get('/metas/niveis');
-      document.getElementById('corpo-niveis').innerHTML = niveis.map((n) => `
-        <tr><td>${n.nivel}</td><td>R$ ${Number(n.repasse_minimo).toFixed(2)}</td><td>R$ ${Number(n.valor).toFixed(2)}</td></tr>
-      `).join('');
-      document.getElementById('modal-niveis').classList.remove('oculto');
-    });
-    document.getElementById('botao-fechar-niveis').addEventListener('click', () => {
-      document.getElementById('modal-niveis').classList.add('oculto');
+      const html = `
+        <table class="tabela">
+          <thead><tr><th>Nível</th><th>Repasse mínimo</th><th>Benefício</th></tr></thead>
+          <tbody>
+            ${niveis.map((n) => `<tr><td>${n.nivel}</td><td>R$ ${Number(n.repasse_minimo).toFixed(2)}</td><td>R$ ${Number(n.valor).toFixed(2)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      `;
+      abrirOverlay('Todos os níveis', html);
     });
   },
 
