@@ -269,17 +269,21 @@ form > .botao { width: 100%; }
 .tabela tr:hover td { background: rgba(255,255,255,0.02); }
 
 .link-acao {
-  background: none;
-  border: none;
-  color: var(--cor-acento);
+  background: var(--cor-fundo-input);
+  border: 1px solid var(--cor-borda);
+  color: var(--cor-texto);
   cursor: pointer;
-  font-size: 13px;
-  padding: 4px 0;
-  margin-right: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 999px;
+  margin: 0;
   min-height: auto;
-  border-radius: 0;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
-.link-acao-erro { color: var(--cor-erro); }
+.link-acao:hover { border-color: var(--cor-acento); color: var(--cor-acento); background: rgba(124,58,237,0.08); }
+.link-acao-erro { color: var(--cor-vermelho); border-color: rgba(200,29,63,0.4); }
+.link-acao-erro:hover { border-color: var(--cor-vermelho); background: rgba(200,29,63,0.1); color: var(--cor-vermelho); }
 
 .barra-progresso {
   width: 100%;

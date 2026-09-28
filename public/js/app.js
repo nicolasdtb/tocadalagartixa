@@ -1307,12 +1307,26 @@ const views = {
 
     container.innerHTML = `
       <h2>Usuários</h2>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+        <input type="text" id="usuarios-busca" placeholder="Buscar por nome ou login..." style="flex:1; min-width:200px; padding:11px 14px; background:var(--cor-fundo-input); border:1px solid var(--cor-borda); border-radius:var(--raio-pequeno); color:var(--cor-texto); font-size:14px;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--cor-texto-fraco); white-space:nowrap;">
+          <input type="checkbox" id="usuarios-mostrar-inativos" style="width:auto;"> Mostrar inativos
+        </label>
+      </div>
       <div id="lista-usuarios" class="lista-cards"></div>
     `;
 
     function renderUsuarios() {
+      const termo = document.getElementById('usuarios-busca').value.trim().toLowerCase();
+      const mostrarInativos = document.getElementById('usuarios-mostrar-inativos').checked;
+      const filtrada = lista.filter((u) => {
+        if (!mostrarInativos && !u.status) return false;
+        if (!termo) return true;
+        return (u.nome || '').toLowerCase().includes(termo) || u.login.toLowerCase().includes(termo);
+      });
+
       const alvo = document.getElementById('lista-usuarios');
-      alvo.innerHTML = lista.map((u) => `
+      alvo.innerHTML = filtrada.map((u) => `
         <div class="card-item">
           <div class="card-item-topo">
             <h3>${u.nome || '(cadastro pendente)'}</h3>
@@ -1404,6 +1418,8 @@ const views = {
     }
 
     renderUsuarios();
+    document.getElementById('usuarios-busca').addEventListener('input', renderUsuarios);
+    document.getElementById('usuarios-mostrar-inativos').addEventListener('change', renderUsuarios);
     mostrarBotaoFixoRodape('+ Novo usuário', abrirFormularioUsuario);
   },
 };
