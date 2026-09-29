@@ -1708,6 +1708,67 @@ const views = {
     document.getElementById('usuarios-mostrar-inativos').addEventListener('change', renderUsuarios);
     mostrarBotaoFixoRodape('+ Novo usuário', abrirFormularioUsuario);
   },
+
+  async perfil(container) {
+    container.innerHTML = '<h2>Meu Perfil</h2><p>Carregando...</p>';
+    let dados;
+    try {
+      dados = await api.get('/usuarios/me');
+    } catch (e) {
+      container.innerHTML = '<h2>Meu Perfil</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <h2>Meu Perfil</h2>
+      <div class="painel-form" style="max-width:420px;">
+        <p class="card-item-meta" style="margin-top:0;">Login: <strong style="color:var(--cor-texto);">${esc(dados.login)}</strong></p>
+        <div id="erro-perfil" class="mensagem-erro"></div>
+        <div id="sucesso-perfil" class="mensagem-sucesso oculto"></div>
+        <form id="form-perfil">
+          <div class="campo"><label for="pf-nome">Nome completo</label><input type="text" id="pf-nome" value="${esc(dados.nome || '')}" required></div>
+          <div class="campo"><label for="pf-email">E-mail</label><input type="email" id="pf-email" value="${esc(dados.email || '')}" required></div>
+          <div class="campo"><label for="pf-telefone">Telefone (só números)</label><input type="text" id="pf-telefone" value="${esc(dados.telefone || '')}" required></div>
+          <div class="campo"><label for="pf-cpf">CPF (só números)</label><input type="text" id="pf-cpf" value="${esc(dados.cpf || '')}" required></div>
+          <button type="submit" class="botao">Salvar alterações</button>
+        </form>
+      </div>
+
+      <div class="painel-form" style="max-width:420px; margin-top:20px;">
+        <h3 style="margin-top:0;">Senha</h3>
+        <p class="card-item-meta">Para trocar sua senha, use a opção de redefinição com o sócio, ou o fluxo de troca obrigatória se estiver com senha provisória.</p>
+      </div>
+
+      <button type="button" class="botao" id="botao-sair-perfil" style="max-width:420px; margin-top:20px; background:var(--cor-vermelho);">Sair da conta</button>
+    `;
+
+    document.getElementById('form-perfil').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const erroEl = document.getElementById('erro-perfil');
+      const sucessoEl = document.getElementById('sucesso-perfil');
+      erroEl.classList.remove('visivel');
+      sucessoEl.classList.add('oculto');
+      try {
+        await api.put('/usuarios/me', {
+          nome: document.getElementById('pf-nome').value.trim(),
+          email: document.getElementById('pf-email').value.trim(),
+          telefone: document.getElementById('pf-telefone').value.trim(),
+          cpf: document.getElementById('pf-cpf').value.trim(),
+        });
+        usuarioAtual.nome = document.getElementById('pf-nome').value.trim();
+        document.getElementById('usuario-logado-nome').textContent = usuarioAtual.nome;
+        sucessoEl.textContent = 'Dados atualizados com sucesso.';
+        sucessoEl.classList.remove('oculto');
+      } catch (err) {
+        erroEl.textContent = err.dados?.erro || 'Erro ao salvar';
+        erroEl.classList.add('visivel');
+      }
+    });
+
+    document.getElementById('botao-sair-perfil').addEventListener('click', () => {
+      if (confirm('Deseja realmente sair da conta?')) fazerLogout();
+    });
+  },
 };
 
 // ---------- VERIFICAÇÃO DE SESSÃO EXISTENTE AO CARREGAR A PÁGINA ----------

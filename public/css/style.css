@@ -203,7 +203,7 @@ form > .botao { width: 100%; }
   font-weight: 600;
 }
 .nav-item-sair { color: var(--cor-texto-fraco); margin-top: auto; }
-.nav-item-sair:hover { color: var(--cor-vermelho); background: rgba(200,29,63,0.08); }
+.nav-item-sair:hover { color: var(--cor-texto); background: rgba(255,255,255,0.04); }
 
 .conteudo-principal {
   flex: 1;

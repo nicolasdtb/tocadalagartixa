@@ -194,4 +194,47 @@ router.post('/trocar-senha', require('../middlewares/auth').requireAuth, async (
   }
 });
 
+// Dados do próprio usuário — qualquer um autenticado
+router.get('/me', require('../middlewares/auth').requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, nome, email, telefone, cpf, login, perfil_id FROM tocadalagartixa.usuarios WHERE id = $1',
+      [req.session.usuario.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ erro: 'Usuário não encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao consultar dados' });
+  }
+});
+
+// Editar os próprios dados (nome/email/telefone/cpf) — não mexe em login/senha
+router.put('/me', require('../middlewares/auth').requireAuth, async (req, res) => {
+  const { nome, email, telefone, cpf } = req.body;
+  const CPF_REGEX = /^\d{11}$/;
+  const TELEFONE_REGEX = /^\d{10,11}$/;
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!nome || !email || !telefone || !cpf) {
+    return res.status(400).json({ erro: 'Todos os campos são obrigatórios: nome, email, telefone, cpf' });
+  }
+  if (!EMAIL_REGEX.test(email)) return res.status(400).json({ erro: 'E-mail em formato inválido' });
+  if (!TELEFONE_REGEX.test(telefone)) return res.status(400).json({ erro: 'Telefone em formato inválido (somente números, 10 ou 11 dígitos)' });
+  if (!CPF_REGEX.test(cpf)) return res.status(400).json({ erro: 'CPF em formato inválido (11 dígitos, somente números)' });
+
+  try {
+    const result = await pool.query(
+      `UPDATE tocadalagartixa.usuarios SET nome = $1, email = $2, telefone = $3, cpf = $4, updated_at = now()
+       WHERE id = $5 RETURNING id, nome, email, telefone, cpf, login`,
+      [nome, email, telefone, cpf, req.session.usuario.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ erro: 'CPF já cadastrado para outro usuário' });
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao salvar dados' });
+  }
+});
+
 module.exports = router;
