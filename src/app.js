@@ -13,6 +13,7 @@ const estoqueRoutes = require('./routes/estoque');
 const financeiroRoutes = require('./routes/financeiro');
 const melhoriasRoutes = require('./routes/melhorias');
 const comunicadosRoutes = require('./routes/comunicados');
+const inicioRoutes = require('./routes/inicio');
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use('/api/estoque', estoqueRoutes);
 app.use('/api/financeiro', financeiroRoutes);
 app.use('/api/melhorias', melhoriasRoutes);
 app.use('/api/comunicados', comunicadosRoutes);
+app.use('/api/inicio', inicioRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {

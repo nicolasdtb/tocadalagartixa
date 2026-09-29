@@ -7,6 +7,13 @@ const telas = {
 
 let usuarioAtual = null;
 
+// Escapa texto vindo de usuários antes de inserir em HTML (evita injeção de código).
+function esc(texto) {
+  return String(texto ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 // ---------- OVERLAY DE TELA CHEIA (padrão reutilizável de criação/edição) ----------
 function abrirOverlay(titulo, htmlCorpo) {
   fecharOverlay();
@@ -205,7 +212,286 @@ window.onComunicadoPendente = (dados) => {
 // Registro de views — cada módulo será preenchido nas próximas etapas
 const views = {
   inicio(container) {
-    container.innerHTML = `<h2>Bem-vindo(a), ${usuarioAtual.nome}</h2><p>Use o menu ao lado para navegar pelos módulos.</p>`;
+    const ehSocio = usuarioAtual.perfil_id === 1;
+    const agora = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const hojeStr = `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}`;
+    const mesRef = `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}`;
+    const primeiroNome = (usuarioAtual.nome || '').split(' ')[0];
+
+    const vazio = (t) => `<p class="card-item-meta">${esc(t)}</p>`;
+    const dia = (d) => String(d).slice(0, 10);
+    const fmtData = (d) => new Date(dia(d) + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    const barra = (pct) => `<div class="barra-progresso"><div class="barra-progresso-preenchida" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>`;
+
+    // Definição dos cards: cada um carrega o próprio conteúdo de forma independente.
+    const definicoes = [
+      {
+        id: 'agendamentos', titulo: 'Próximos agendamentos', destino: 'agenda', visivel: () => true,
+        carregar: async () => {
+          const todos = await api.get('/agendamentos');
+          const meus = ehSocio ? todos : todos.filter((a) => String(a.usuario_id) === String(usuarioAtual.id));
+          const proximos = meus
+            .filter((a) => dia(a.data) >= hojeStr)
+            .sort((a, b) => (dia(a.data) + a.horario).localeCompare(dia(b.data) + b.horario))
+            .slice(0, 5);
+          if (!proximos.length) return vazio('Nenhum agendamento pela frente.');
+          return proximos.map((a) => `
+            <div class="inicio-item"><strong>${esc(fmtData(a.data))} · ${esc(a.horario.slice(0, 5))}</strong><span>${esc(a.responsavel)}</span></div>
+          `).join('');
+        },
+      },
+      {
+        id: 'meta', titulo: 'Minha meta', destino: 'metas', visivel: () => !ehSocio,
+        carregar: async () => {
+          const m = await api.get('/metas/individual');
+          const pct = m.nivel_maximo_atingido ? 100 : (m.acumulado_mes / Number(m.proximo_nivel.repasse_minimo)) * 100;
+          return `
+            <p class="inicio-valor">R$ ${Number(m.acumulado_mes).toFixed(2)}</p>
+            ${barra(pct)}
+            <p class="card-item-meta" style="margin-top:10px;">${m.nivel_maximo_atingido
+              ? 'Nível máximo atingido'
+              : `Faltam R$ ${Number(m.falta_para_proximo).toFixed(2)} para o Nível ${m.proximo_nivel.nivel}`}</p>
+          `;
+        },
+      },
+      {
+        id: 'ranking', titulo: 'Ranking do mês', destino: null, visivel: () => true,
+        carregar: async () => {
+          const r = await api.get('/inicio/ranking');
+          if (!r.length) return vazio('Nenhum residente ativo.');
+          return r.filter((l, i) => i < 5 || l.voce).map((l) => `
+            <div class="ranking-linha ${l.voce ? 'voce' : ''}">
+              <span class="ranking-pos ${l.posicao && l.posicao <= 3 ? 'p' + l.posicao : ''}">${l.posicao ?? '–'}</span>
+              <span class="ranking-nome">${esc(l.nome)}${l.voce ? ' (você)' : ''}</span>
+            </div>
+          `).join('');
+        },
+      },
+      {
+        id: 'estoque', titulo: 'Estoque', destino: 'estoque', visivel: () => true,
+        carregar: async () => {
+          const mats = (await api.get('/estoque/materiais')).filter((m) => m.status);
+          const proximos = [...mats]
+            .sort((a, b) => (Number(a.quantidade) - Number(a.minimo)) - (Number(b.quantidade) - Number(b.minimo)))
+            .slice(0, 5);
+          if (!proximos.length) return vazio('Nenhum material cadastrado.');
+          const iconeAlerta = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" style="color:var(--cor-vermelho); flex-shrink:0;"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17h.01"/></svg>';
+          return proximos.map((m) => `
+            <div class="inicio-item">
+              <strong style="display:flex; align-items:center; gap:6px;">${m.estoque_baixo ? iconeAlerta : ''}${esc(m.nome)}</strong>
+              <span>${Number(m.quantidade)} ${esc(m.unidade)}</span>
+            </div>
+          `).join('');
+        },
+      },
+      {
+        id: 'melhorias', titulo: 'Melhoria atual', destino: 'melhorias', visivel: () => true,
+        carregar: async () => {
+          const a = await api.get('/melhorias/atual');
+          if (!a.melhoria_atual) return vazio(a.mensagem || 'Nenhuma melhoria em andamento.');
+          return `
+            <p class="inicio-destaque">${esc(a.melhoria_atual)}</p>
+            ${barra(a.progresso_percentual)}
+            <p class="card-item-meta" style="margin-top:10px;">R$ ${Number(a.valor_acumulado).toFixed(2)} de R$ ${Number(a.valor_alvo).toFixed(2)}
+              ${a.estado === 'meta_atingida' ? '<span class="badge badge-verde">meta atingida</span>' : ''}</p>
+          `;
+        },
+      },
+      {
+        id: 'comunicado', titulo: 'Último comunicado', destino: 'comunicados', visivel: () => true,
+        carregar: async () => {
+          const lista = await api.get('/comunicados');
+          if (!lista.length) return vazio('Nenhum comunicado publicado.');
+          const c = lista[0];
+          let selo = '';
+          if (c.obrigatorio) {
+            selo = ehSocio
+              ? '<span class="badge badge-escarlate">Obrigatório</span>'
+              : (c.confirmado_pelo_usuario
+                ? '<span class="badge badge-verde">Confirmado</span>'
+                : '<span class="badge badge-escarlate">Pendente de confirmação</span>');
+          }
+          return `
+            <p class="inicio-destaque texto-clamp-1">${esc(c.titulo)}</p>
+            <p class="card-item-texto texto-clamp-4" style="margin:6px 0 10px;">${esc(c.conteudo)}</p>
+            ${selo}
+          `;
+        },
+      },
+      {
+        id: 'financeiro', titulo: 'Financeiro do mês', destino: 'financeiro', visivel: () => ehSocio,
+        carregar: async () => {
+          const p = await api.get(`/financeiro/fechamento/${mesRef}/preview`);
+          return `
+            <p class="inicio-valor">R$ ${p.E.toFixed(2)}</p>
+            <p class="card-item-meta" style="margin-bottom:10px;">entradas no mês</p>
+            <div class="inicio-item"><span>Destinado a Melhorias</span><strong>R$ ${p.I.toFixed(2)}</strong></div>
+            <div class="inicio-item"><span>Marketing</span><strong>R$ ${p.K.toFixed(2)}</strong></div>
+          `;
+        },
+      },
+    ];
+
+    const disponiveis = definicoes.filter((d) => d.visivel());
+    const idsDisponiveis = disponiveis.map((d) => d.id);
+    const chavePrefs = `toca_inicio_prefs_${usuarioAtual.id}`;
+    const conteudos = {};
+    let modoEdicao = false;
+    let arrastandoId = null;
+
+    function carregarPrefs() {
+      try { return JSON.parse(localStorage.getItem(chavePrefs)) || {}; } catch (e) { return {}; }
+    }
+    function salvarPrefs(p) {
+      try { localStorage.setItem(chavePrefs, JSON.stringify(p)); } catch (e) { /* sem armazenamento: só não persiste */ }
+    }
+    let prefs = carregarPrefs();
+
+    // Ordem salva + cards novos (que ainda não estavam nas preferências) no final.
+    function ordemCompleta() {
+      const salva = (prefs.ordem || []).filter((id) => idsDisponiveis.includes(id));
+      return [...salva, ...idsDisponiveis.filter((id) => !salva.includes(id))];
+    }
+    function idsOcultos() {
+      return (prefs.ocultos || []).filter((id) => idsDisponiveis.includes(id));
+    }
+    function persistir(ordem, ocultos) {
+      prefs = { ordem, ocultos };
+      salvarPrefs(prefs);
+    }
+
+    const chevronCima = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 15l6-6 6 6"/></svg>';
+    const chevronBaixo = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>';
+
+    container.innerHTML = `
+      <div class="inicio-topo">
+        <h2>Olá${primeiroNome ? ', ' + esc(primeiroNome) : ''}</h2>
+        <div class="inicio-acoes">
+          <button type="button" class="link-acao oculto" id="inicio-restaurar">Restaurar padrão</button>
+          <button type="button" class="link-acao" id="inicio-personalizar">Personalizar</button>
+        </div>
+      </div>
+      <div id="inicio-grid" class="inicio-grid"></div>
+      <div id="inicio-ocultos" class="inicio-ocultos oculto"></div>
+    `;
+
+    const grid = document.getElementById('inicio-grid');
+
+    function renderGrid() {
+      const ocultos = idsOcultos();
+      const visiveis = ordemCompleta().filter((id) => !ocultos.includes(id));
+
+      grid.innerHTML = visiveis.map((id, i) => {
+        const def = disponiveis.find((d) => d.id === id);
+        const corpo = id in conteudos ? conteudos[id] : '<p class="card-item-meta">Carregando...</p>';
+        return `
+          <section class="inicio-card ${modoEdicao ? 'editando' : ''}" data-card="${id}" ${modoEdicao ? 'draggable="true"' : ''}>
+            ${modoEdicao ? `
+              <div class="inicio-controles">
+                <button type="button" class="link-acao" data-mover="cima" data-id="${id}" ${i === 0 ? 'disabled' : ''} aria-label="Mover para cima">${chevronCima}</button>
+                <button type="button" class="link-acao" data-mover="baixo" data-id="${id}" ${i === visiveis.length - 1 ? 'disabled' : ''} aria-label="Mover para baixo">${chevronBaixo}</button>
+                <button type="button" class="link-acao link-acao-erro" data-ocultar="${id}">Ocultar</button>
+              </div>` : ''}
+            <div class="inicio-card-topo">
+              <h3>${def.titulo}</h3>
+              ${def.destino && !modoEdicao ? `<button type="button" class="link-acao" data-ir="${def.destino}">Abrir</button>` : ''}
+            </div>
+            <div class="inicio-card-corpo">${corpo}</div>
+          </section>
+        `;
+      }).join('') || '<p class="card-item-meta">Todos os cards estão ocultos. Use "Personalizar" para mostrá-los de novo.</p>';
+
+      const areaOcultos = document.getElementById('inicio-ocultos');
+      areaOcultos.classList.toggle('oculto', !(modoEdicao && ocultos.length));
+      areaOcultos.innerHTML = ocultos.length ? `
+        <p class="card-item-meta" style="margin:0 0 10px;">Cards ocultos</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          ${ocultos.map((id) => `<button type="button" class="link-acao" data-mostrar="${id}">+ ${disponiveis.find((d) => d.id === id).titulo}</button>`).join('')}
+        </div>` : '';
+
+      document.getElementById('inicio-personalizar').textContent = modoEdicao ? 'Concluir' : 'Personalizar';
+      document.getElementById('inicio-restaurar').classList.toggle('oculto', !modoEdicao);
+    }
+
+    function mover(id, sentido) {
+      const ordem = ordemCompleta();
+      const ocultos = idsOcultos();
+      const i = ordem.indexOf(id);
+      let j = i + (sentido === 'cima' ? -1 : 1);
+      while (j >= 0 && j < ordem.length && ocultos.includes(ordem[j])) j += (sentido === 'cima' ? -1 : 1);
+      if (j < 0 || j >= ordem.length) return;
+      [ordem[i], ordem[j]] = [ordem[j], ordem[i]];
+      persistir(ordem, ocultos);
+      renderGrid();
+    }
+
+    grid.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      if (btn.dataset.ir) navegarPara(btn.dataset.ir);
+      else if (btn.dataset.mover) mover(btn.dataset.id, btn.dataset.mover);
+      else if (btn.dataset.ocultar) {
+        persistir(ordemCompleta(), [...idsOcultos(), btn.dataset.ocultar]);
+        renderGrid();
+      }
+    });
+
+    document.getElementById('inicio-ocultos').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-mostrar]');
+      if (!btn) return;
+      persistir(ordemCompleta(), idsOcultos().filter((id) => id !== btn.dataset.mostrar));
+      renderGrid();
+    });
+
+    // Arrastar e soltar (desktop). No celular, as setas do modo "Personalizar" fazem o mesmo.
+    grid.addEventListener('dragstart', (e) => {
+      const card = e.target.closest('.inicio-card');
+      if (!card || !modoEdicao) return;
+      arrastandoId = card.dataset.card;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', arrastandoId);
+      card.classList.add('arrastando');
+    });
+    grid.addEventListener('dragend', (e) => {
+      arrastandoId = null;
+      const card = e.target.closest('.inicio-card');
+      if (card) card.classList.remove('arrastando');
+    });
+    grid.addEventListener('dragover', (e) => { if (arrastandoId) e.preventDefault(); });
+    grid.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const alvo = e.target.closest('.inicio-card');
+      if (!alvo || !arrastandoId || alvo.dataset.card === arrastandoId) return;
+      const ordem = ordemCompleta().filter((id) => id !== arrastandoId);
+      ordem.splice(ordem.indexOf(alvo.dataset.card), 0, arrastandoId);
+      persistir(ordem, idsOcultos());
+      arrastandoId = null;
+      renderGrid();
+    });
+
+    document.getElementById('inicio-personalizar').addEventListener('click', () => {
+      modoEdicao = !modoEdicao;
+      renderGrid();
+    });
+    document.getElementById('inicio-restaurar').addEventListener('click', () => {
+      prefs = {};
+      try { localStorage.removeItem(chavePrefs); } catch (e) { /* ignora */ }
+      renderGrid();
+    });
+
+    renderGrid();
+
+    // Cada card busca seus dados sozinho: falha em um não afeta os outros.
+    disponiveis.forEach((def) => {
+      def.carregar()
+        .then((html) => { conteudos[def.id] = html; })
+        .catch(() => { conteudos[def.id] = '<p class="card-item-meta">Não foi possível carregar.</p>'; })
+        .then(() => {
+          const el = document.querySelector(`[data-card="${def.id}"] .inicio-card-corpo`);
+          if (el) el.innerHTML = conteudos[def.id];
+        });
+    });
   },
 
   async agenda(container) {
