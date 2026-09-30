@@ -1000,78 +1000,135 @@ const views = {
     let mesIdx = hoje.getMonth();
     let ano = hoje.getFullYear();
     const nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-    const nomesCategoria = { 1: 'Operacional', 2: 'Materiais', 3: 'Benefícios', 4: 'Marketing', 5: 'Melhorias' };
+    const CATS = [
+      { id: 1, nome: 'Operacional', cor: 'var(--cor-acento)', icone: '<path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>' },
+      { id: 2, nome: 'Materiais', cor: 'var(--cor-texto-fraco)', icone: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' },
+      { id: 3, nome: 'Benefícios', cor: 'var(--cor-acento)', icone: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M15.5 14.2c2.3.4 4 2.2 4 4.8"/>' },
+      { id: 4, nome: 'Marketing', cor: 'var(--cor-vermelho)', icone: '<path d="M3 11a9 9 0 0118 0v6a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3"/><path d="M9 19a2 2 0 004 0"/>' },
+      { id: 5, nome: 'Melhorias', cor: 'var(--cor-sucesso)', icone: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>' },
+    ];
+    const chavesBanco = { 1: 'operacional', 2: 'materiais', 3: 'beneficios', 4: 'marketing', 5: 'melhorias' };
     const nomesTipoLancamento = { 1: 'Entrada', 2: 'Gasto', 3: 'Ajuste' };
+    const badgeTipoLancamento = { 1: 'badge-verde', 2: 'badge-escarlate', 3: 'badge-roxo' };
 
     function mesRef() { return `${ano}-${String(mesIdx + 1).padStart(2, '0')}`; }
+    function pct(parte, total) { return total > 0 ? Math.min(100, (parte / total) * 100) : 0; }
 
     container.innerHTML = `
-      <h2>Financeiro</h2>
+      <div class="fin-cabecalho">
+        <h2 style="margin:0;">Financeiro</h2>
+        <div class="fin-acoes-mes">
+          <button type="button" class="botao-pill" id="fin-botao-fechar">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
+            Fechar mês
+          </button>
+          <button type="button" class="botao-pill botao-pill-secundario" id="fin-botao-reabrir">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 017.8-1.3"/></svg>
+            Reabrir mês
+          </button>
+        </div>
+      </div>
+
       <div class="calendario-cabecalho-mes" style="max-width:340px;">
         <button type="button" id="fin-mes-anterior" aria-label="Mês anterior">&#8249;</button>
         <h3 id="fin-mes-label"></h3>
         <button type="button" id="fin-mes-proximo" aria-label="Próximo mês">&#8250;</button>
       </div>
 
-      <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0 20px;">
-        <button type="button" class="botao-secundario" id="fin-botao-fechar" style="width:auto;">Fechar mês</button>
-        <button type="button" class="botao-secundario" id="fin-botao-reabrir" style="width:auto;">Reabrir mês</button>
-      </div>
+      <div class="mensagem-info" style="margin:14px 0 20px; max-width:640px;">O fechamento do mês consolida os valores e define o saldo final de cada categoria.</div>
 
-      <div id="fin-resumo" class="painel-form" style="max-width:640px; margin-bottom:20px;"></div>
+      <div id="fin-faturamento" class="inicio-card fin-faturamento-card" style="margin-bottom:24px; max-width:100%;"><p class="card-item-meta">Carregando...</p></div>
 
-      <h3>Saldos por categoria</h3>
-      <div id="fin-saldos" class="lista-cards" style="margin-bottom:24px;"></div>
+      <h3>Situação financeira</h3>
+      <div id="fin-categorias" class="lista-cards" style="margin-bottom:24px;"></div>
 
       <h3>Lançamentos do mês</h3>
-      <div id="fin-lancamentos" class="lista-cards"></div>
+      <div id="fin-lancamentos" class="lista-compacta"></div>
     `;
 
     async function carregarTudo() {
       document.getElementById('fin-mes-label').textContent = `${nomesMes[mesIdx]} de ${ano}`;
-      document.getElementById('fin-resumo').innerHTML = '<p style="color:var(--cor-texto-fraco); margin:0;">Carregando...</p>';
-      document.getElementById('fin-saldos').innerHTML = '';
-      document.getElementById('fin-lancamentos').innerHTML = '';
+      const elFat = document.getElementById('fin-faturamento');
+      const elCats = document.getElementById('fin-categorias');
+      const elLanc = document.getElementById('fin-lancamentos');
+      elFat.innerHTML = '<p class="card-item-meta">Carregando...</p>';
+      elCats.innerHTML = '';
+      elLanc.innerHTML = '';
 
+      let preview;
       try {
-        const preview = await api.get(`/financeiro/fechamento/${mesRef()}/preview`);
-        document.getElementById('fin-resumo').innerHTML = `
-          <h3 style="margin-top:0;">Resumo do mês</h3>
-          <p style="font-size:14px; line-height:1.9; margin:0;">
-            Entradas (E): <strong>R$ ${preview.E.toFixed(2)}</strong><br>
-            Operacional (O): R$ ${preview.O.toFixed(2)} · Materiais (M): R$ ${preview.M.toFixed(2)}<br>
-            Benefícios (B): R$ ${preview.B.toFixed(2)} · Marketing (K): R$ ${preview.K.toFixed(2)}<br>
-            Melhorias (I): <strong>R$ ${preview.I.toFixed(2)}</strong>
-          </p>
-        `;
+        preview = await api.get(`/financeiro/fechamento/${mesRef()}/preview`);
       } catch (err) {
-        document.getElementById('fin-resumo').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao calcular resumo'}</div>`;
+        elFat.innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao calcular resumo'}</div>`;
+        return;
       }
 
-      try {
-        const saldos = await api.get(`/financeiro/saldos/${mesRef()}`);
-        document.getElementById('fin-saldos').innerHTML = saldos.map((s) => `
-          <div class="card-item">
-            <div class="card-item-topo"><h3>${s.nome}</h3></div>
-            <p class="card-item-meta">Inicial: R$ ${Number(s.saldo_inicial).toFixed(2)} · Destinação: R$ ${Number(s.destinacao).toFixed(2)} · Gastos: R$ ${Number(s.gastos).toFixed(2)}</p>
-            <p style="margin:6px 0 0; font-weight:600;">Saldo final: R$ ${Number(s.saldo_final).toFixed(2)}</p>
+      const destinacoes = { 1: preview.O, 2: preview.M, 3: preview.B, 4: preview.K, 5: preview.I };
+
+      elFat.innerHTML = `
+        <div class="fin-faturamento-linha">
+          <div class="fin-faturamento-valor">
+            <p class="card-item-meta" style="margin:0;">Faturamento do mês</p>
+            <p class="inicio-valor">R$ ${preview.E.toFixed(2)}</p>
+            <p style="color:var(--cor-sucesso); font-size:13px; display:flex; align-items:center; gap:6px; margin:0;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+              Entradas no período
+            </p>
           </div>
-        `).join('') || '<p style="color:var(--cor-texto-fraco);">Mês ainda não fechado.</p>';
-      } catch (err) {
-        document.getElementById('fin-saldos').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao carregar saldos'}</div>`;
-      }
+          <div class="fin-faturamento-distribuicao">
+            <p class="card-item-meta" style="margin:0 0 10px;">Distribuição do faturamento</p>
+            ${CATS.map((c) => `
+              <div class="fin-dist-linha">
+                <span class="fin-dist-dot" style="background:${c.cor};"></span>
+                <span class="fin-dist-nome">${c.nome}</span>
+                <span class="fin-dist-valor">R$ ${destinacoes[c.id].toFixed(2)}</span>
+                <span class="fin-dist-pct">${pct(destinacoes[c.id], preview.E).toFixed(0)}%</span>
+                <div class="fin-dist-barra"><div class="fin-dist-barra-preenchida" style="width:${pct(destinacoes[c.id], preview.E)}%; background:${c.cor};"></div></div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      let saldos = [];
+      try {
+        saldos = await api.get(`/financeiro/saldos/${mesRef()}`);
+      } catch (e) { /* mês ainda não fechado — segue sem saldos */ }
+
+      elCats.innerHTML = CATS.map((c) => {
+        const s = saldos.find((x) => x.nome === chavesBanco[c.id]) || null;
+        const destinado = s ? Number(s.destinacao) : destinacoes[c.id];
+        const gasto = s ? Number(s.gastos) : 0;
+        const disponivel = s ? Number(s.saldo_final) : destinado - gasto;
+        return `
+          <div class="card-item">
+            <div class="card-item-topo">
+              <h3 style="display:flex; align-items:center; gap:8px;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="${c.cor}" stroke-width="1.8">${c.icone}</svg>
+                ${c.nome}
+              </h3>
+            </div>
+            <p class="card-item-meta">Destinado: R$ ${destinado.toFixed(2)} · Gasto: R$ ${gasto.toFixed(2)}</p>
+            <p style="margin:6px 0 8px; font-weight:600;">Disponível: R$ ${disponivel.toFixed(2)}</p>
+            <div class="barra-progresso"><div class="barra-progresso-preenchida" style="width:${pct(gasto, destinado)}%; background:${c.cor};"></div></div>
+            ${!s ? '<p class="card-item-meta" style="margin-top:6px;">Mês ainda não fechado — valores estimados</p>' : ''}
+          </div>
+        `;
+      }).join('');
 
       try {
         const lancamentos = await api.get(`/financeiro/lancamentos/${mesRef()}`);
-        document.getElementById('fin-lancamentos').innerHTML = lancamentos.map((l) => `
-          <div class="card-item">
-            <div class="card-item-topo"><h3>${nomesTipoLancamento[l.tipo_id]}${l.categoria ? ' · ' + l.categoria : ''}</h3></div>
-            <p class="card-item-meta">${new Date(l.created_at).toLocaleDateString('pt-BR')} · ${l.usuario_nome}${l.descricao ? ' · ' + l.descricao : ''}</p>
-            <p style="margin:6px 0 0; font-weight:600;">R$ ${Number(l.valor).toFixed(2)}</p>
+        elLanc.innerHTML = lancamentos.map((l) => `
+          <div class="card-item card-item-linha">
+            <span class="badge ${badgeTipoLancamento[l.tipo_id]}">${nomesTipoLancamento[l.tipo_id]}</span>
+            <span class="fin-lanc-cat">${esc(l.categoria || 'Entrada geral')}</span>
+            <span class="fin-lanc-desc">${esc(l.descricao || '—')}</span>
+            <span class="fin-lanc-data">${new Date(l.created_at).toLocaleDateString('pt-BR')}</span>
+            <span class="fin-lanc-valor" style="color:${l.tipo_id === 1 ? 'var(--cor-sucesso)' : 'var(--cor-vermelho)'};">${l.tipo_id === 1 ? '+' : '-'} R$ ${Number(l.valor).toFixed(2)}</span>
           </div>
-        `).join('') || '<p style="color:var(--cor-texto-fraco);">Nenhum lançamento neste mês.</p>';
+        `).join('') || '<p class="card-item-meta">Nenhum lançamento neste mês.</p>';
       } catch (err) {
-        document.getElementById('fin-lancamentos').innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao carregar lançamentos'}</div>`;
+        elLanc.innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao carregar lançamentos'}</div>`;
       }
     }
 
@@ -1111,7 +1168,7 @@ const views = {
         } else {
           wrapper.classList.remove('oculto');
           const sel = document.getElementById('fl-categoria');
-          sel.innerHTML = categoriasParaTipo(tipo).map((id) => `<option value="${id}">${nomesCategoria[id]}</option>`).join('');
+          sel.innerHTML = categoriasParaTipo(tipo).map((id) => `<option value="${id}">${CATS.find((c) => c.id === id).nome}</option>`).join('');
         }
         document.getElementById('fl-desc-wrapper').classList.toggle('oculto', tipo === 'orcamento');
       }
@@ -1154,7 +1211,7 @@ const views = {
     });
 
     document.getElementById('fin-botao-fechar').addEventListener('click', async () => {
-      if (!confirm(`Fechar o mês ${nomesMes[mesIdx]}/${ano}?`)) return;
+      if (!confirm(`Fechar o mês ${nomesMes[mesIdx]}/${ano}? Isso consolida os valores e trava novas edições sem reabertura.`)) return;
       try {
         await api.post(`/financeiro/fechamento/${mesRef()}/fechar`);
         carregarTudo();
