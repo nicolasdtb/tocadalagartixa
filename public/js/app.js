@@ -1095,10 +1095,25 @@ const views = {
         saldos = await api.get(`/financeiro/saldos/${mesRef()}`);
       } catch (e) { /* mês ainda não fechado — segue sem saldos */ }
 
+      let lancamentos = [];
+      try {
+        lancamentos = await api.get(`/financeiro/lancamentos/${mesRef()}`);
+      } catch (e) { /* segue sem lançamentos se falhar */ }
+
+      // Antes do fechamento não existe saldo gravado — calcula o gasto ao vivo
+      // a partir dos lançamentos do mês, pra refletir cada registro na hora.
+      const gastoAoVivo = {};
+      lancamentos.forEach((l) => {
+        if (l.tipo_id === 2 && l.categoria) {
+          const cat = CATS.find((c) => chavesBanco[c.id] === l.categoria);
+          if (cat) gastoAoVivo[cat.id] = (gastoAoVivo[cat.id] || 0) + Number(l.valor);
+        }
+      });
+
       elCats.innerHTML = CATS.map((c) => {
         const s = saldos.find((x) => x.nome === chavesBanco[c.id]) || null;
         const destinado = s ? Number(s.destinacao) : destinacoes[c.id];
-        const gasto = s ? Number(s.gastos) : 0;
+        const gasto = s ? Number(s.gastos) : (gastoAoVivo[c.id] || 0);
         const disponivel = s ? Number(s.saldo_final) : destinado - gasto;
         return `
           <div class="card-item">
@@ -1116,20 +1131,18 @@ const views = {
         `;
       }).join('');
 
-      try {
-        const lancamentos = await api.get(`/financeiro/lancamentos/${mesRef()}`);
-        elLanc.innerHTML = lancamentos.map((l) => `
-          <div class="card-item card-item-linha">
-            <span class="badge ${badgeTipoLancamento[l.tipo_id]}">${nomesTipoLancamento[l.tipo_id]}</span>
-            <span class="fin-lanc-cat">${esc(l.categoria || 'Entrada geral')}</span>
-            <span class="fin-lanc-desc">${esc(l.descricao || '—')}</span>
-            <span class="fin-lanc-data">${new Date(l.created_at).toLocaleDateString('pt-BR')}</span>
-            <span class="fin-lanc-valor" style="color:${l.tipo_id === 1 ? 'var(--cor-sucesso)' : 'var(--cor-vermelho)'};">${l.tipo_id === 1 ? '+' : '-'} R$ ${Number(l.valor).toFixed(2)}</span>
-          </div>
-        `).join('') || '<p class="card-item-meta">Nenhum lançamento neste mês.</p>';
-      } catch (err) {
-        elLanc.innerHTML = `<div class="mensagem-erro visivel">${err.dados?.erro || 'Erro ao carregar lançamentos'}</div>`;
-      }
+      elLanc.innerHTML = lancamentos.map((l) => {
+        const catExibicao = CATS.find((c) => chavesBanco[c.id] === l.categoria)?.nome || l.categoria || 'Entrada geral';
+        return `
+        <div class="card-item card-item-linha">
+          <span class="badge ${badgeTipoLancamento[l.tipo_id]}">${nomesTipoLancamento[l.tipo_id]}</span>
+          <span class="fin-lanc-cat">${esc(catExibicao)}</span>
+          <span class="fin-lanc-desc">${esc(l.descricao || '—')}</span>
+          <span class="fin-lanc-data">${new Date(l.created_at).toLocaleDateString('pt-BR')}</span>
+          <span class="fin-lanc-valor" style="color:${l.tipo_id === 1 ? 'var(--cor-sucesso)' : 'var(--cor-vermelho)'};">${l.tipo_id === 1 ? '+' : '-'} R$ ${Number(l.valor).toFixed(2)}</span>
+        </div>
+      `;
+      }).join('') || '<p class="card-item-meta">Nenhum lançamento neste mês.</p>';
     }
 
     function categoriasParaTipo(tipo) {
