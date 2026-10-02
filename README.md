@@ -1,163 +1,95 @@
-# Toca da Lagartixa — App Interno
+# Toca da Lagartixa — Sistema de Gestão do Estúdio
 
-Aplicação interna de gestão do estúdio TOCA DA LAGARTIXA: agendamento, repasse, metas, benefícios, estoque, controle financeiro, melhorias, comunicados e auditoria.
+Aplicativo interno para gerenciar o estúdio de tatuagem **Toca da Lagartixa**: agenda dos atendimentos, repasse e metas dos tatuadores, benefícios, estoque, controle financeiro, melhorias do estúdio e comunicados da equipe.
 
-Baseado no documento de regras de negócio consolidado (20/09/2026). Não é um sistema de gestão de clientes — é uma ferramenta de organização interna para sócios e residentes/tatuadores.
+É um **PWA** (Progressive Web App): funciona no navegador e pode ser instalado na tela inicial do Android (Chrome) e do iOS (Safari), sem passar por loja de aplicativos.
 
-## Stack
+## Quem usa
 
-- **Backend:** Node.js + Express
-- **Banco:** PostgreSQL (schema `tocadalagartixa`)
-- **Autenticação:** sessão via cookie (`express-session` + `connect-pg-simple`, sessões persistidas no Postgres) + `bcrypt` para hash de senha
-- **Acesso ao banco:** `pg` (sem ORM)
-- **Frontend:** ainda não implementado (backend testado via `curl`)
-- **Formato de distribuição:** PWA (instalável via Chrome/Safari em Android e iOS)
+| Perfil | O que faz |
+|---|---|
+| **Sócio** | Acesso completo: cria usuários, aprova e paga benefícios, controla o financeiro, publica comunicados, gerencia estoque e melhorias. |
+| **Residente** | Tatuador do estúdio: vê a agenda, registra os próprios atendimentos, acompanha a própria meta, solicita o benefício do mês, dá saída no estoque e lê os comunicados. Não vê o caixa do estúdio. |
 
-## Infraestrutura
+## Módulos
 
-- VM Ubuntu Server dedicada, isolada de outras aplicações.
-- **ZeroTier**: acesso administrativo/SSH à VM (não usado para o app em si).
-- **Tailscale + Funnel**: exposição pública da aplicação com HTTPS automático.
-- Hardening aplicado: SSH por chave (sem senha, sem root), UFW (nega tudo por padrão, libera SSH só via ZeroTier e tudo via Tailscale), fail2ban, unattended-upgrades.
+- **Início:** painel com cards personalizáveis (reordenar e ocultar), incluindo ranking de atendimentos sem mostrar valores.
+- **Agenda:** calendário mensal compartilhado; o repasse é calculado automaticamente por faixa de valor.
+- **Minha Meta:** acumulado do mês, nível atual e próximo nível de benefício.
+- **Benefícios:** solicitação mensal pelo residente; aprovação e pagamento pelo sócio.
+- **Estoque:** materiais, entradas, saídas e alerta de estoque baixo.
+- **Financeiro (sócio):** entradas, orçamentos, gastos por categoria, fechamento e reabertura de mês, saldos acumulados.
+- **Melhorias:** fila de melhorias do estúdio com meta coletiva e estado automático.
+- **Comunicados:** publicação com versionamento, motivo de edição e confirmação de leitura obrigatória.
+- **Usuários (sócio):** criação, ativação e desativação, troca de perfil e redefinição de senha.
+- **Meu Perfil:** dados pessoais, foto e saída da conta.
+- **Notificações:** sino com alertas calculados na hora (estoque baixo, benefícios pendentes, meta coletiva atingida).
+
+Todas as ações importantes ficam registradas em uma **trilha de auditoria**.
+
+## Tecnologias
+
+- **Backend:** Node.js + Express, driver `pg` (sem ORM), sessão por cookie (`express-session` + `connect-pg-simple`), senhas com `bcrypt`.
+- **Banco de dados:** PostgreSQL, schema `tocadalagartixa`, versionado por **migrations** SQL.
+- **Frontend:** HTML, CSS e JavaScript puros (sem framework), servidos pelo próprio Express.
+- **Infraestrutura:** VM Ubuntu Server, serviço `systemd`, acesso público por Tailscale Funnel (HTTPS), administração por SSH via ZeroTier, backup diário do banco.
 
 ## Estrutura do projeto
 
 ```
 toca-lagartixa/
+├── migrations/          # Arquivos SQL numerados (001, 002, ...)
+├── public/              # Frontend (PWA)
+│   ├── index.html
+│   ├── css/style.css
+│   ├── js/api.js        # Cliente da API
+│   ├── js/app.js        # Telas (views) e navegação
+│   ├── icons/ img/      # Ícones do PWA e logo
+│   ├── manifest.json
+│   └── service-worker.js
 ├── src/
-│   ├── app.js                    # Configuração do Express (middlewares, rotas)
-│   ├── server.js                 # Ponto de entrada
-│   ├── db.js                     # Pool de conexão com o Postgres
-│   ├── routes/
-│   │   ├── auth.js                # Login, logout, /me
-│   │   ├── usuarios.js            # CRUD, status, perfil, redefinição de senha
-│   │   ├── primeiroAcesso.js      # Fluxo de primeiro acesso obrigatório
-│   │   ├── agendamentos.js        # CRUD + cálculo de repasse + regra dos R$2.000
-│   │   ├── metas.js               # Meta Individual (acumulado, níveis)
-│   │   ├── beneficios.js          # Benefício mensal, categorias, aprovação
-│   │   ├── estoque.js             # Materiais e movimentações
-│   │   ├── financeiro.js          # Entradas, orçamentos, gastos, fechamento mensal
-│   │   ├── melhorias.js           # Fila de melhorias e Meta Coletiva
-│   │   └── comunicados.js         # Comunicados com versionamento
-│   ├── middlewares/
-│   │   └── auth.js                # requireAuth, requireSocio, requirePrimeiroAcessoConcluido
-│   └── utils/
-│       ├── credenciais.js         # Geração de login/senha provisória
-│       └── auditoria.js           # Helper centralizado de registro de auditoria
-├── public/                        # Arquivos estáticos (frontend — pendente)
-├── seed.js                        # Cria o primeiro usuário sócio
-├── schema_tocadalagartixa.sql     # Script de criação de todas as tabelas
-├── .env                            # Variáveis de ambiente (NÃO versionado)
-└── .gitignore
+│   ├── app.js           # Montagem do Express e ordem dos middlewares
+│   ├── server.js        # Inicialização
+│   ├── db.js            # Conexão com o PostgreSQL
+│   ├── migrate.js       # Aplicador de migrations
+│   ├── middlewares/     # Autenticação e permissões
+│   ├── routes/          # Uma rota por módulo
+│   └── utils/           # Auditoria, geração de credenciais
+├── .env                 # Configuração local (nunca vai para o Git)
+└── docs/                # Documentação detalhada
 ```
 
-## Configuração do ambiente
+## Rodando o projeto (resumo)
 
-```
-DATABASE_URL=postgres://usuario:senha@localhost:5432/tocalagartixa
-SESSION_SECRET=string_aleatoria_longa
-PORT=3001
-```
-Caracteres especiais na senha do banco (`#`, `@`, etc.) precisam ser URL-encodados.
-
-## Instalação
+Requisitos: Node.js, PostgreSQL e um arquivo `.env` com as variáveis de conexão e o segredo da sessão.
 
 ```bash
 npm install
-node seed.js
-npm run dev   # com nodemon, recarrega sozinho
+node src/migrate.js        # cria/atualiza o banco
+npm start                  # produção (na VM roda como serviço systemd)
+npm run dev                # desenvolvimento, com reinício automático (nodemon)
 ```
 
-## Rotas da API
+O guia completo de instalação, publicação e solução de problemas está em [docs/01-instalacao.md](docs/01-instalacao.md).
 
-### Autenticação (`/api/auth`)
-| Método | Rota | Descrição |
-| --- | --- | --- |
-| POST | `/login` | Autentica e cria sessão |
-| POST | `/logout` | Encerra a sessão |
-| GET | `/me` | Dados da sessão atual |
+## Documentação
 
-### Primeiro acesso (`/api/primeiro-acesso`)
-| POST | `/` | Completa cadastro + troca credenciais (obrigatório no 1º login) |
+| Documento | Conteúdo |
+|---|---|
+| [01 — Instalação e operação](docs/01-instalacao.md) | Montar o servidor, publicar, atualizar, logs, problemas comuns |
+| [02 — Módulos e regras de negócio](docs/02-modulos-e-regras.md) | Como cada módulo funciona e quem pode o quê |
+| [03 — Banco de dados](docs/03-banco-de-dados.md) | Tabelas, migrations, backup e conexão pelo DBeaver |
+| [04 — Instalar o app no celular](docs/04-instalar-pwa.md) | PWA no Android e no iOS |
+| [05 — Documentação técnica](docs/05-tecnica.md) | Arquitetura, rotas da API, segurança, como criar um módulo |
+| [06 — Pendências e roadmap](docs/06-pendencias.md) | O que falta fazer |
 
-### Usuários (`/api/usuarios`) — sócio, salvo indicado
-| Método | Rota | Descrição |
-| --- | --- | --- |
-| POST | `/` | Cria usuário (gera login/senha provisória) |
-| GET | `/` | Lista usuários |
-| PATCH | `/:id/status` | Ativa/desativa (bloqueio imediato) |
-| PATCH | `/:id/perfil` | Altera sócio ↔ residente |
-| POST | `/:id/redefinir-senha` | Gera senha provisória nova |
-| POST | `/trocar-senha` | Qualquer usuário troca a própria senha |
+## Segurança em resumo
 
-### Agendamentos (`/api/agendamentos`)
-CRUD completo (POST/GET/PUT/DELETE). Calcula repasse pela tabela de faixas, bloqueia conflito de horário do mesmo residente, aplica isenções da regra especial dos R$2.000 automaticamente, e concede o benefício especial + isenções quando o acumulado do mês cruza R$2.000.
+- Login com sessão em cookie (7 dias); a cada requisição o servidor reconfere no banco se o usuário continua ativo.
+- Senhas guardadas com hash `bcrypt`; senha provisória obrigatoriamente trocada no primeiro acesso.
+- Servidor com SSH somente por chave, firewall (UFW), fail2ban e atualizações automáticas.
+- O banco não é exposto na internet; o acesso externo ao app passa só pelo Tailscale Funnel.
 
-### Metas (`/api/metas`)
-| GET | `/individual` | Acumulado do mês, nível atual/próximo |
-| GET | `/niveis` | Tabela completa de níveis |
+## Licença e uso
 
-### Benefícios (`/api/beneficios`)
-| GET | `/categorias` | Categorias ativas |
-| POST | `/solicitar` | Residente escolhe categoria (1x/mês) |
-| PATCH | `/:id/status` | Sócio aprova/paga |
-| GET | `/resumo` | Visão consolidada por tatuador (sócio) |
-
-### Estoque (`/api/estoque`)
-| POST | `/materiais` | Cadastra material (sócio) |
-| GET | `/materiais` | Lista com alerta de estoque baixo |
-| PATCH | `/materiais/:id/status` | Ativa/desativa (sócio) |
-| POST | `/movimentacoes` | Entrada (sócio) ou saída (todos); nunca fica negativo |
-| DELETE | `/movimentacoes/:id` | Exclui e reverte o estoque |
-
-### Financeiro (`/api/financeiro`) — sócio
-| POST | `/entradas` | Nova entrada de caixa do mês |
-| POST | `/orcamentos` | Define orçamento Operacional/Materiais |
-| POST | `/gastos` | Lança gasto numa categoria |
-| GET | `/fechamento/:mes/preview` | Calcula E/O/M/B/K/I sem gravar |
-| POST | `/fechamento/:mes/fechar` | Fecha o mês e grava saldos |
-| POST | `/fechamento/:mes/reabrir` | Reabre mês fechado (motivo obrigatório) |
-| GET | `/saldos/:mes` | Saldos do mês por categoria |
-| GET | `/saldos-periodo?inicio=&fim=` | Resumo consolidado multi-mês |
-
-### Melhorias (`/api/melhorias`)
-| POST | `/` | Cadastra melhoria na fila (sócio) |
-| GET | `/` | Fila completa (sócio) |
-| PATCH | `/:id/prioridade` | Reordena (sócio) |
-| PATCH | `/:id/valor-alvo` | Ajusta valor-alvo (sócio) |
-| POST | `/:id/finalizar` | Registra compra, passa pro próximo item (sócio) |
-| GET | `/atual` | Visão do tatuador: item atual + progresso, sem caixa total |
-
-### Comunicados (`/api/comunicados`)
-| POST | `/` | Cria comunicado (v1) |
-| PUT | `/:id` | Publica nova versão (avisa se houve edição concorrente) |
-| GET | `/` | Lista ativos com status de confirmação do usuário |
-| GET | `/:id/versoes` | Histórico completo (sócio) |
-| POST | `/:id/confirmar` | Confirma leitura |
-| DELETE | `/:id` | Soft delete (preserva histórico) |
-
-## Regras de negócio essenciais
-
-- **Repasse** (percentual sobre o valor da tattoo) e **nível de benefício** (por repasse acumulado no mês) são cálculos independentes.
-- **Regra especial:** ao atingir R$2.000 de repasse acumulado no mês, concede benefício de R$250 + 3 isenções de repasse para os próximos bookings **fechados** no mesmo mês (não importa o mês do serviço).
-- Perfis: **Sócio** (acesso total) e **Residente/Tatuador** (acesso restrito).
-- Fechamento mensal trava edições; correções exigem reabertura por um sócio.
-- Marketing = 20% das novas entradas; Melhorias recebe o residual após Operacional, Materiais, Benefícios e Marketing.
-
-Documento de regras de negócio completo disponível no projeto — fonte da verdade para qualquer dúvida de comportamento.
-
-## Status do desenvolvimento
-
-- [x] Fase 0 — Infraestrutura (VM, rede, segurança)
-- [x] Fase 1 — Modelagem e criação do banco de dados
-- [x] Fase 2 — Autenticação e usuários
-- [x] Fase 3 — Agendamento
-- [x] Fase 4 — Repasse e Meta Individual
-- [x] Fase 5 — Benefícios
-- [x] Fase 6 — Estoque
-- [x] Fase 7 — Controle Financeiro
-- [x] Fase 8 — Meta Coletiva e Fila de Melhorias
-- [x] Fase 9 — Comunicados
-- [x] Fase 10 — Auditoria
-- [ ] Fase 11 — Integração e testes finais
-- [ ] Fase 12 — Empacotamento como PWA (frontend ainda não existe)
+Projeto de uso interno do estúdio. Não deve ser redistribuído sem autorização dos sócios.
