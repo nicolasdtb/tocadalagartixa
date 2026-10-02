@@ -139,7 +139,7 @@ router.post('/', requireAuth, async (req, res) => {
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT a.id, a.usuario_id, u.nome AS responsavel, a.data, a.horario, a.duracao, a.valor,
+      `SELECT a.id, a.usuario_id, u.nome AS responsavel, u.foto IS NOT NULL AS tem_foto, EXTRACT(EPOCH FROM u.updated_at)::bigint AS foto_v, a.data, a.horario, a.duracao, a.valor,
               a.percentual, a.repasse, a.mes_competencia
        FROM tocadalagartixa.agendamentos a
        JOIN tocadalagartixa.usuarios u ON u.id = a.usuario_id

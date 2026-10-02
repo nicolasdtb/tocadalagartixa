@@ -15,6 +15,13 @@ function esc(texto) {
 }
 
 // ---------- OVERLAY DE TELA CHEIA (padrão reutilizável de criação/edição) ----------
+// Avatar pequeno: iniciais por baixo, foto por cima (se existir). Foto vem de /api/usuarios/:id/foto.
+function avatarMini(id, nome, temFoto, v) {
+  const ini = esc(String(nome || '?').trim().charAt(0).toUpperCase() || '?');
+  const img = temFoto ? `<img src="/api/usuarios/${Number(id)}/foto?v=${Number(v) || 0}" alt="" loading="lazy" onerror="this.remove()">` : '';
+  return `<span class="av"><b>${ini}</b>${img}</span>`;
+}
+
 function abrirOverlay(titulo, htmlCorpo) {
   fecharOverlay();
   const overlay = document.createElement('div');
@@ -166,6 +173,7 @@ function iniciarDashboard() {
 
   mostrarTela('appShell');
   navegarPara('inicio');
+  if (!ehSocio) verificarCondicoes();
 
   // Verificação leve pra já disparar o bloqueio de comunicado obrigatório
   // assim que o dashboard carrega, sem esperar o usuário clicar em outra aba.
@@ -255,7 +263,7 @@ const views = {
             return `
             <div class="ini-agenda ${hoje ? 'ini-agenda-hoje' : ''}">
               <div class="ini-data"><b>${pad(d.getDate())}</b><small>${esc(d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''))}</small></div>
-              <div class="ini-agenda-info"><strong>${esc(a.horario.slice(0, 5))}</strong><span>${esc(a.responsavel)}</span></div>
+              <div class="ini-agenda-info"><strong>${esc(a.horario.slice(0, 5))}</strong><span class="ini-resp">${avatarMini(a.usuario_id, a.responsavel, a.tem_foto, a.foto_v)}${esc(a.responsavel)}</span></div>
               ${hoje ? '<span class="badge badge-verde">Hoje</span>' : ''}
             </div>`;
           }).join('');
@@ -284,7 +292,7 @@ const views = {
           return r.filter((l, i) => i < 5 || l.voce).map((l) => `
             <div class="ranking-linha ${l.voce ? 'voce' : ''}">
               <span class="ranking-pos ${l.posicao && l.posicao <= 3 ? 'p' + l.posicao : ''}">${l.posicao ?? '–'}</span>
-              <span class="ranking-nome">${esc(l.nome)}${l.voce ? ' (você)' : ''}</span>
+              ${avatarMini(l.id, l.nome, l.tem_foto, l.foto_v)}<span class="ranking-nome">${esc(l.nome)}${l.voce ? ' (você)' : ''}</span>
             </div>
           `).join('');
         },
@@ -613,7 +621,7 @@ const views = {
           const podeEditar = ehSocio || Number(ag.usuario_id) === Number(usuarioAtual.id);
           return `
             <div class="card-item">
-              <div class="card-item-topo"><h3>${ag.responsavel}</h3></div>
+              <div class="card-item-topo"><h3 class="ag-resp">${avatarMini(ag.usuario_id, ag.responsavel, ag.tem_foto, ag.foto_v)}${esc(ag.responsavel)}</h3></div>
               <p class="card-item-meta">${ag.horario.slice(0,5)} · R$ ${Number(ag.valor).toFixed(2)} · repasse R$ ${Number(ag.repasse).toFixed(2)} (${Number(ag.percentual)}%)</p>
               ${podeEditar ? `
                 <div class="card-item-acoes">
@@ -703,7 +711,7 @@ const views = {
             const nomeResponsavel = ehSocio
               ? (residentes.find((r) => String(r.id) === String(corpoReq.usuario_id))?.nome || '')
               : usuarioAtual.nome;
-            agendamentos.push({ ...criado, responsavel: nomeResponsavel });
+            agendamentos.push({ ...criado, responsavel: nomeResponsavel, tem_foto: (agendamentos.find((x) => String(x.usuario_id) === String(criado.usuario_id)) || {}).tem_foto || (String(criado.usuario_id) === String(usuarioAtual.id) && !!usuarioAtual.__temFoto), foto_v: (agendamentos.find((x) => String(x.usuario_id) === String(criado.usuario_id)) || {}).foto_v || 0 });
           }
           fecharOverlay();
           renderCalendario();
@@ -1895,6 +1903,15 @@ const views = {
           <p class="card-item-meta">Para trocar sua senha, peça a redefinição a um sócio.</p>
         </div>
 
+        <div class="painel-form" style="max-width:420px; margin-top:20px;">
+          <h3 style="margin-top:0;">Ajuda</h3>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button type="button" class="link-acao" id="pf-tut-geral">Como usar o app</button>
+            <button type="button" class="link-acao" id="pf-tut-reset">Rever todos os tutoriais</button>
+            <button type="button" class="link-acao" id="pf-condicoes">Sobre o estúdio</button>
+          </div>
+        </div>
+
         <button type="button" class="botao" id="botao-sair-perfil" style="max-width:420px; width:100%; margin-top:20px; background:var(--cor-vermelho);">Sair da conta</button>
       `;
 
@@ -1934,6 +1951,7 @@ const views = {
             if (fotoNova) corpo.foto = fotoNova;
             const atualizado = await api.put('/usuarios/me', corpo);
             dados = { ...dados, ...atualizado };
+            usuarioAtual.__temFoto = !!dados.foto;
             usuarioAtual.nome = dados.nome;
             document.getElementById('usuario-logado-nome').textContent = usuarioAtual.nome;
             editando = false;
@@ -1951,12 +1969,44 @@ const views = {
         });
       }
 
+      document.getElementById('pf-tut-geral').addEventListener('click', () => abrirTutorial('geral'));
+      document.getElementById('pf-condicoes').addEventListener('click', () => navegarPara('condicoes'));
+      document.getElementById('pf-tut-reset').addEventListener('click', () => {
+        try {
+          Object.keys(localStorage).filter((k) => k.startsWith(`toca_tut_${usuarioAtual.id}_`)).forEach((k) => localStorage.removeItem(k));
+        } catch (e) { /* sem armazenamento */ }
+        alert('Pronto! Os tutoriais vão aparecer de novo ao abrir cada aba.');
+      });
       document.getElementById('botao-sair-perfil').addEventListener('click', () => {
         if (confirm('Deseja realmente sair da conta?')) fazerLogout();
       });
     }
 
     render();
+  },
+
+  async condicoes(container) {
+    container.innerHTML = '<h2>Sobre o estúdio</h2><p class="card-item-meta">Carregando...</p>';
+    let doc;
+    try { doc = await api.get('/condicoes'); } catch (e) {
+      container.innerHTML = '<h2>Sobre o estúdio</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
+      return;
+    }
+    const ehSocio = usuarioAtual.perfil_id === 1;
+    const rodape = doc.aceito
+      ? `<p class="cond-aceito">Você aceitou estas condições em ${esc(new Date(doc.aceito_em).toLocaleDateString('pt-BR'))}.</p>`
+      : (!ehSocio ? '<button type="button" class="botao" id="cond-ler">Ler e aceitar as condições</button>' : '');
+    container.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <h2 style="margin:0;">Sobre o estúdio</h2>
+        ${ehSocio ? '<button type="button" class="link-acao" id="cond-editar">Editar</button>' : ''}
+      </div>
+      ${condicoesHtml(doc.conteudo)}
+      <div style="padding-top:16px;">${rodape}</div>`;
+    const ler = document.getElementById('cond-ler');
+    if (ler) ler.addEventListener('click', verificarCondicoes);
+    const ed = document.getElementById('cond-editar');
+    if (ed) ed.addEventListener('click', () => editarSobre(doc, container));
   },
 };
 
@@ -2032,12 +2082,25 @@ setInterval(atualizarNotificacoes, 60000);
 // O botão "?" no topo reabre o tutorial da aba atual a qualquer momento.
 
 function obterTutoriais() {
+  const geral = [
+    { titulo: 'Bem-vindo(a) ao app da Toca', texto: 'Aqui você acompanha agenda, metas, benefícios, estoque e avisos do estúdio. Vamos ver o básico em poucos passos.' },
+    { titulo: 'Menu', texto: 'No celular, toque no ícone de menu para abrir as telas. No computador, o menu fica na lateral. Cada tela nova mostra um tutorial curto só uma vez.' },
+    { titulo: 'Sino e ajuda', texto: 'O sino mostra seus alertas (benefício aprovado, estoque baixo, comunicados). O botão ? ao lado dele reabre o tutorial da tela em que você está.' },
+    { titulo: 'Seu perfil', texto: 'Em Meu Perfil você atualiza seus dados e troca a foto. Ela aparece nos agendamentos e no ranking. Lá também dá para rever tutoriais e as condições do estúdio.' },
+    { titulo: 'Instale no celular', texto: 'Para abrir como app: no Android use o menu do navegador e escolha Instalar app; no iPhone use Compartilhar e Adicionar à Tela de Início.' },
+  ];
   const painel = [
     { titulo: 'Seu painel', texto: 'A tela Início resume o estúdio em cards. Toque na setinha de um card para abrir a tela completa dele.' },
     { titulo: 'Ranking do mês', texto: 'O ranking mostra a posição de cada residente no mês, só com nomes e posições. Nenhum valor em reais aparece.' },
     { titulo: 'Personalize', texto: 'Em "Personalizar" você reordena e oculta cards. A sua escolha fica salva neste aparelho. O sino no canto superior mostra os alertas.' },
   ];
   return {
+    geral: { residente: geral, socio: geral },
+    condicoes: { residente: null, socio: [
+      { titulo: 'Sobre o estúdio', texto: 'Este é o documento oficial do estúdio. Toque em Editar para alterar o texto. Marque "exigir novo aceite" quando a mudança for importante: todos os residentes verão a tela de aceite de novo.' },
+    ], comum: [
+      { titulo: 'Sobre o estúdio', texto: 'Aqui está o documento com valores, espaço, materiais, porcentagem e responsabilidades dos residentes. Você pode voltar a ele quando quiser.' },
+    ] },
     inicio: { residente: painel, socio: [
       { titulo: 'Seu painel', texto: 'A tela Início resume o estúdio em cards, inclusive o Financeiro do mês. Toque na setinha de um card para abrir a tela completa.' },
       painel[1], painel[2],
@@ -2132,6 +2195,11 @@ function agendarTutorial(view) {
   setTimeout(() => {
     if (window.__viewAtual !== view || !usuarioAtual) return;
     if (document.getElementById('overlay-ativo') || document.getElementById('tutorial-ativo')) return;
+    if (document.getElementById('cond-gate')) return;
+    if (!tutorialJaVisto('geral')) {
+      abrirTutorial('geral', () => { if (passosDoTutorial(view) && !tutorialJaVisto(view)) abrirTutorial(view); });
+      return;
+    }
     if (!passosDoTutorial(view) || tutorialJaVisto(view)) return;
     abrirTutorial(view);
   }, 600);
@@ -2153,7 +2221,7 @@ function criarBotaoAjuda() {
   shell.insertAdjacentElement('afterend', btn);
 }
 
-function abrirTutorial(view) {
+function abrirTutorial(view, aoFechar) {
   const passos = passosDoTutorial(view);
   if (!passos) {
     alert('Esta tela não tem tutorial.');
@@ -2169,6 +2237,7 @@ function abrirTutorial(view) {
   function fechar() {
     caixa.remove();
     document.removeEventListener('keydown', teclas);
+    if (aoFechar) aoFechar();
   }
   function teclas(e) { if (e.key === 'Escape') fechar(); }
   document.addEventListener('keydown', teclas);
@@ -2199,4 +2268,133 @@ function abrirTutorial(view) {
     else fechar();
   });
   desenhar();
+}
+
+
+// ---------- Sobre o estúdio (texto simples com marcação leve) ----------
+// # Seção | ## Card (vazio = card sem título; "!" no início = destaque de alerta) | - item | > destaque | >> destaque tracejado
+// | col | col | tabela (1ª linha = cabeçalho) | **negrito** | texto solto = parágrafo
+function condicoesHtml(texto) {
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const secs = [];
+  let sec = null;
+  let card = null;
+  const abrirSec = (t) => { sec = { t, b: [] }; secs.push(sec); card = null; };
+  const ultimo = (tipo) => { const l = sec.b[sec.b.length - 1]; return l && l.tipo === tipo ? l : null; };
+  String(texto || '').split('\n').forEach((bruta) => {
+    const l = bruta.trim();
+    if (!l) return;
+    let m;
+    if ((m = /^#(?!#)\s*(.*)$/.exec(l))) { abrirSec(m[1]); return; }
+    if (!sec) abrirSec('');
+    if ((m = /^##(?!#)\s*(.*)$/.exec(l))) { card = { tipo: 'card', t: m[1], l: [] }; sec.b.push(card); return; }
+    if ((m = /^>>\s?(.*)$/.exec(l))) { const d = ultimo('dest') || (sec.b.push({ tipo: 'dest', tr: true, l: [] }), sec.b[sec.b.length - 1]); d.l.push(m[1]); card = null; return; }
+    if ((m = /^>\s?(.*)$/.exec(l))) { const d = ultimo('dest') || (sec.b.push({ tipo: 'dest', tr: false, l: [] }), sec.b[sec.b.length - 1]); d.l.push(m[1]); card = null; return; }
+    if (l.startsWith('|')) {
+      const cels = l.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const t = ultimo('tab') || (sec.b.push({ tipo: 'tab', r: [] }), sec.b[sec.b.length - 1]);
+      t.r.push(cels); card = null; return;
+    }
+    if ((m = /^-\s+(.*)$/.exec(l))) {
+      if (card) card.l.push({ li: m[1] });
+      else { const c = ultimo('chips') || (sec.b.push({ tipo: 'chips', i: [] }), sec.b[sec.b.length - 1]); c.i.push(m[1]); }
+      return;
+    }
+    if (card) card.l.push({ p: l }); else sec.b.push({ tipo: 'p', t: l });
+  });
+
+  const cardHtml = (c) => {
+    const alerta = c.t.startsWith('!');
+    const titulo = alerta ? c.t.slice(1).trim() : c.t;
+    let corpo = '';
+    let lis = [];
+    const fecha = () => { if (lis.length) { corpo += `<ul>${lis.join('')}</ul>`; lis = []; } };
+    c.l.forEach((x) => { if (x.li) lis.push(`<li>${inline(x.li)}</li>`); else { fecha(); corpo += `<p>${inline(x.p)}</p>`; } });
+    fecha();
+    return `<div class="cond-item ${alerta ? 'alerta' : ''}">${titulo ? `<strong>${inline(titulo)}</strong>` : ''}${corpo}</div>`;
+  };
+
+  return '<div class="cond">' + secs.map((s2, n) => {
+    let html = '';
+    let grupo = [];
+    const fechaGrupo = () => { if (grupo.length) { html += `<div class="cond-grade">${grupo.map(cardHtml).join('')}</div>`; grupo = []; } };
+    s2.b.forEach((b) => {
+      if (b.tipo === 'card') { grupo.push(b); return; }
+      fechaGrupo();
+      if (b.tipo === 'p') html += `<p class="cond-nota">${inline(b.t)}</p>`;
+      else if (b.tipo === 'chips') html += `<div class="cond-chips">${b.i.map((i) => `<span>${inline(i)}</span>`).join('')}</div>`;
+      else if (b.tipo === 'dest') html += `<div class="cond-destaque ${b.tr ? 'tracejado' : ''}">${b.l.length > 1 ? `<strong>${inline(b.l[0])}</strong>${b.l.slice(1).map((x) => `<p>${inline(x)}</p>`).join('')}` : `<p>${inline(b.l[0])}</p>`}</div>`;
+      else if (b.tipo === 'tab') html += `<table class="cond-tabela"><thead><tr>${b.r[0].map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${b.r.slice(1).map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    });
+    fechaGrupo();
+    return `<section class="cond-sec">${s2.t ? `<h3><span>${String(n + 1).padStart(2, '0')}</span> ${inline(s2.t)}</h3>` : ''}${html}</section>`;
+  }).join('') + '</div>';
+}
+
+function editarSobre(doc, container) {
+  const ov = abrirOverlay('Editar "Sobre o estúdio"', `
+    <p class="card-item-meta">Marcação: <code># Seção</code> · <code>## Título do card</code> (abaixo dele, texto ou <code>- itens</code>) · <code>&gt; destaque</code> · <code>&gt;&gt; destaque tracejado</code> · <code>| a | b |</code> tabela · <code>**negrito**</code>. Use <code>## !Título</code> para um card de alerta.</p>
+    <div id="erro-sobre" class="mensagem-erro"></div>
+    <textarea id="sobre-texto" style="width:100%; min-height:50vh; font-family:ui-monospace,monospace; font-size:13px; line-height:1.5;"></textarea>
+    <label style="display:flex; gap:8px; align-items:flex-start; margin:12px 0; font-size:14px;"><input type="checkbox" id="sobre-novo-aceite" style="margin-top:3px;"> Exigir que todos os residentes aceitem novamente (use quando a mudança for importante)</label>
+    <button type="button" class="botao" id="sobre-salvar">Salvar</button>`);
+  const ta = ov.querySelector('#sobre-texto');
+  ta.value = doc.conteudo;
+  ov.querySelector('#sobre-salvar').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try {
+      await api.put('/condicoes', { conteudo: ta.value, exigir_novo_aceite: ov.querySelector('#sobre-novo-aceite').checked });
+      fecharOverlay();
+      views.condicoes(container);
+    } catch (err) {
+      const el = ov.querySelector('#erro-sobre');
+      el.textContent = err.dados?.erro || 'Erro ao salvar';
+      el.classList.add('visivel');
+      e.target.disabled = false;
+    }
+  });
+}
+
+// Tela cheia do primeiro login (e sempre que o sócio exigir novo aceite). O botão só libera depois de rolar até o fim.
+async function verificarCondicoes() {
+  let doc;
+  try { doc = await api.get('/condicoes'); } catch (e) { return; }
+  if (!doc || doc.aceito || document.getElementById('cond-gate')) return;
+  const gate = document.createElement('div');
+  gate.id = 'cond-gate';
+  gate.className = 'cond-gate';
+  gate.innerHTML = `
+    <div class="cond-gate-corpo">
+      <p class="cond-gate-topo">Bem-vindo(a) à Toca</p>
+      <h2>Sobre o estúdio e condições para residentes</h2>
+      <p class="cond-nota">Leia até o fim. O botão será liberado quando você chegar ao final da página.</p>
+      ${condicoesHtml(doc.conteudo)}
+      <div class="cond-fim" style="height:1px;"></div>
+    </div>
+    <div class="cond-rodape-fixo">
+      <p class="cond-dica" id="cond-dica">Role até o fim para continuar</p>
+      <button type="button" class="botao" id="cond-gate-ok" disabled>Compreendo e desejo continuar</button>
+    </div>`;
+  document.body.appendChild(gate);
+  const corpo = gate.querySelector('.cond-gate-corpo');
+  const btn = gate.querySelector('#cond-gate-ok');
+  const checar = () => {
+    if (corpo.scrollTop + corpo.clientHeight >= corpo.scrollHeight - 24) {
+      btn.disabled = false;
+      gate.querySelector('#cond-dica').textContent = '';
+    }
+  };
+  corpo.addEventListener('scroll', checar);
+  setTimeout(checar, 300);
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      await api.post('/condicoes/aceitar', {});
+      gate.remove();
+      agendarTutorial(window.__viewAtual);
+    } catch (err) {
+      btn.disabled = false;
+      alert('Não foi possível registrar. Tente de novo.');
+    }
+  });
 }

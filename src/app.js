@@ -15,6 +15,7 @@ const melhoriasRoutes = require('./routes/melhorias');
 const comunicadosRoutes = require('./routes/comunicados');
 const inicioRoutes = require('./routes/inicio');
 const notificacoesRoutes = require('./routes/notificacoes');
+const condicoesRoutes = require('./routes/condicoes');
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use('/api/melhorias', melhoriasRoutes);
 app.use('/api/comunicados', comunicadosRoutes);
 app.use('/api/inicio', inicioRoutes);
 app.use('/api/notificacoes', notificacoesRoutes);
+app.use('/api/condicoes', condicoesRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {

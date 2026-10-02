@@ -194,4 +194,17 @@ Pontos em que o app ainda não segue exatamente o documento de regras (também l
 | Quinta categoria de benefício | Espaço aberto para sugestão | Não criada; entra com decisão interna. |
 | "Manter logado" | Opção no login, máximo 7 dias | A sessão sempre dura até 7 dias. |
 
-Itens que o app oferece **além** da especificação: tela Início personalizável com ranking, Notificações, foto de perfil, motivo obrigatório na edição de comunicados e campo de materiais nos gastos.
+Itens que o app oferece **além** da especificação: tela Início personalizável com ranking, Notificações, foto de perfil (também nos agendamentos e no ranking), motivo obrigatório na edição de comunicados, campo de materiais nos gastos, tutoriais por aba e a aba Sobre o estúdio com aceite.
+
+## Sobre o estúdio e aceite das condições
+
+- Aba **Sobre o estúdio**: documento do estúdio (valores e convivência, espaço, materiais, porcentagem, responsabilidades), guardado no banco.
+- **Sócios editam** o texto (botão Editar, marcação simples explicada no editor). Ao salvar, podem marcar "exigir novo aceite": a versão sobe e todos os residentes precisam aceitar de novo. A edição é auditada.
+- **Primeiro login do residente**: tela cheia com o documento. O botão "Compreendo e desejo continuar" só libera depois de rolar até o fim. O aceite grava usuário, versão e data.
+- Limitação conhecida: o bloqueio é feito na tela, não no servidor (ver `06-pendencias.md`).
+
+## Tutoriais
+
+- Cada aba tem um tutorial curto (texto diferente para sócio e residente) que abre sozinho na primeira visita. Há também um guia geral do app no primeiro acesso.
+- O botão **?** reabre o tutorial da aba atual. Em Meu Perfil > Ajuda: rever o guia geral, rever todos os tutoriais e abrir Sobre o estúdio.
+- O "já visto" fica no navegador (`localStorage`), por usuário. Em outro aparelho, o tutorial aparece de novo.

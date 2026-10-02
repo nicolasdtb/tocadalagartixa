@@ -218,3 +218,12 @@ SELECT a.created_at, u.nome, a.modulo, a.acao, a.entidade, a.entidade_id
 FROM auditoria a LEFT JOIN usuarios u ON u.id = a.usuario_id
 ORDER BY a.created_at DESC LIMIT 50;
 ```
+
+## Tabelas adicionadas depois (migrações 006 e 007)
+
+| Tabela | Para que serve |
+|---|---|
+| `sobre_estudio` | Uma única linha (`id = 1`) com o texto do documento (`conteudo`), a `versao`, quem e quando atualizou. |
+| `aceites_condicoes` | Um registro por usuário e versão aceita (`usuario_id`, `versao`, `aceito_em`). Chave única em (`usuario_id`, `versao`). |
+
+Subir a `versao` em `sobre_estudio` faz todos os residentes voltarem a ter aceite pendente.

@@ -12,7 +12,7 @@ router.get('/ranking', requireAuth, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT u.id, u.nome,
+      `SELECT u.id, u.nome, u.foto IS NOT NULL AS tem_foto, EXTRACT(EPOCH FROM u.updated_at)::bigint AS foto_v,
               COALESCE(SUM(a.repasse), 0) AS total,
               RANK() OVER (ORDER BY COALESCE(SUM(a.repasse), 0) DESC) AS posicao
        FROM tocadalagartixa.usuarios u
@@ -27,6 +27,7 @@ router.get('/ranking', requireAuth, async (req, res) => {
     const ranking = result.rows.map((r) => ({
       // quem ainda não teve repasse no mês fica sem posição (evita todo mundo em 1º lugar)
       posicao: Number(r.total) > 0 ? Number(r.posicao) : null,
+      id: r.id, tem_foto: r.tem_foto, foto_v: Number(r.foto_v),
       nome: r.nome || 'Residente (cadastro pendente)',
       voce: String(r.id) === String(req.session.usuario.id),
     }));

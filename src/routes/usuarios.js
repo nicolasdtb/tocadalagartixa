@@ -247,4 +247,19 @@ router.put('/me', require('../middlewares/auth').requireAuth, async (req, res) =
   }
 });
 
+// Foto de perfil servida como imagem (cacheável), para listas leves. Só aceita tipos de imagem seguros.
+router.get('/:id/foto', require('../middlewares/auth').requireAuth, async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) return res.status(404).end();
+  try {
+    const r = await pool.query('SELECT foto FROM tocadalagartixa.usuarios WHERE id = $1', [req.params.id]);
+    const m = /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/s.exec(r.rows[0]?.foto || '');
+    if (!m) return res.status(404).end();
+    res.set({ 'Content-Type': m[1], 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff' });
+    res.send(Buffer.from(m[2], 'base64'));
+  } catch (err) {
+    console.error(err);
+    res.status(500).end();
+  }
+});
+
 module.exports = router;

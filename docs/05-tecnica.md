@@ -227,3 +227,9 @@ Exemplo: módulo "Fornecedores".
 6. **Cache do PWA:** aumente a versão do cache em `public/service-worker.js` para os aparelhos receberem a novidade.
 7. **Documentação:** atualize os documentos 02 (regras), 03 (tabelas) e este (rotas).
 8. **Publicar:** envie os arquivos para a VM, `node src/migrate.js`, `sudo systemctl restart toca-lagartixa` e `git commit` + `git push`.
+
+## 7. Acréscimos recentes
+
+- **Rotas novas**: `GET /api/condicoes` (documento e situação do aceite), `POST /api/condicoes/aceitar`, `PUT /api/condicoes` (sócio), `GET /api/usuarios/:id/foto` (foto como imagem).
+- **Fotos**: ficam em base64 na coluna `usuarios.foto`. As listas (agendamentos, ranking) só trazem `tem_foto` e `foto_v` (versão); o navegador busca a imagem em `/api/usuarios/:id/foto?v=...`, com cache de 1 dia. A rota só serve png, jpeg, webp e gif, com `X-Content-Type-Options: nosniff`.
+- **Tutoriais e aceite**: totalmente no frontend (`app.js`: `obterTutoriais`, `abrirTutorial`, `verificarCondicoes`, `condicoesHtml`).
