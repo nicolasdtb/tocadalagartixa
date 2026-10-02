@@ -187,6 +187,8 @@ document.querySelectorAll('.nav-item').forEach((botao) => {
 function navegarPara(view) {
   esconderBotaoFixoRodape();
   atualizarNotificacoes();
+  window.__viewAtual = view;
+  agendarTutorial(view);
   document.querySelectorAll('.nav-item').forEach((b) => {
     b.classList.toggle('ativo', b.dataset.view === view);
   });
@@ -2023,3 +2025,178 @@ function abrirNotificacoes() {
 }
 
 setInterval(atualizarNotificacoes, 60000);
+
+
+// ---------- Tutorial de primeiro acesso (um por aba) ----------
+// Aparece sozinho na primeira vez que o usuário abre cada aba (marcado por usuário, neste aparelho).
+// O botão "?" no topo reabre o tutorial da aba atual a qualquer momento.
+
+function obterTutoriais() {
+  const painel = [
+    { titulo: 'Seu painel', texto: 'A tela Início resume o estúdio em cards. Toque na setinha de um card para abrir a tela completa dele.' },
+    { titulo: 'Ranking do mês', texto: 'O ranking mostra a posição de cada residente no mês, só com nomes e posições. Nenhum valor em reais aparece.' },
+    { titulo: 'Personalize', texto: 'Em "Personalizar" você reordena e oculta cards. A sua escolha fica salva neste aparelho. O sino no canto superior mostra os alertas.' },
+  ];
+  return {
+    inicio: { residente: painel, socio: [
+      { titulo: 'Seu painel', texto: 'A tela Início resume o estúdio em cards, inclusive o Financeiro do mês. Toque na setinha de um card para abrir a tela completa.' },
+      painel[1], painel[2],
+    ] },
+    agenda: { residente: [
+      { titulo: 'Calendário do estúdio', texto: 'Todos veem o calendário completo. Os dias com atendimento ficam marcados com uma bolinha. Use as setas para trocar de mês.' },
+      { titulo: 'Ver e criar', texto: 'Toque em um dia para ver a lista de atendimentos dele e use o botão de novo agendamento para marcar o seu. Cada agendamento tem data, horário, duração aproximada e valor da tattoo.' },
+      { titulo: 'Repasse automático', texto: 'O valor da tattoo (mínimo R$ 100) define o percentual do estúdio e o repasse é calculado sozinho. Você não pode ter dois agendamentos começando no mesmo horário e só edita ou exclui os seus.' },
+    ], socio: [
+      { titulo: 'Calendário do estúdio', texto: 'Aqui estão os agendamentos de todos os residentes. Os dias com atendimento ficam marcados com uma bolinha.' },
+      { titulo: 'Ver e criar', texto: 'Toque em um dia para ver a lista e use o botão de novo agendamento. Como sócio, você cria, edita e exclui agendamentos de qualquer residente.' },
+      { titulo: 'Repasse automático', texto: 'O repasse é calculado pelo valor da tattoo e vai para o mês da data prevista. Alterar a data ou o valor recalcula tudo. Exclusões ficam na auditoria.' },
+    ] },
+    metas: { residente: [
+      { titulo: 'Sua meta do mês', texto: 'Aqui aparece o repasse que você acumulou no mês. Ele volta a zero todo dia 1º.' },
+      { titulo: 'Níveis', texto: 'A tela mostra seu nível atual, o próximo e quanto falta. Toque no ícone de interrogação para ver todos os níveis e benefícios.' },
+      { titulo: 'Benefício', texto: 'Ao alcançar um nível você tem direito ao benefício correspondente. Solicite na aba Benefícios, uma vez por mês.' },
+    ], socio: [
+      { titulo: 'Meta individual', texto: 'Esta tela mostra o repasse acumulado no mês, o nível atual e o próximo. Toque no ícone de interrogação para ver a tabela de níveis.' },
+      { titulo: 'Benefícios dos residentes', texto: 'A visão por residente, com aprovação e pagamento, fica na aba Benefícios.' },
+    ] },
+    beneficios: { residente: [
+      { titulo: 'Um benefício por mês', texto: 'O valor depende do seu nível no mês. Ele é pessoal, não acumula para o mês seguinte e precisa de aprovação.' },
+      { titulo: 'Como solicitar', texto: 'Toque em "+ Solicitar benefício" e escolha uma categoria: Roupas, Uber, Adega ou Tabacaria. Vale uma única compra por mês, com vários itens da mesma categoria.' },
+      { titulo: 'Acompanhe', texto: 'A solicitação passa por Pendente, Aprovado e Pago. O sino avisa quando for aprovada ou paga.' },
+    ], socio: [
+      { titulo: 'Visão por residente', texto: 'Cada linha mostra o repasse acumulado, o valor do benefício e a situação. Quem não pediu aparece como "Sem solicitação".' },
+      { titulo: 'Aprovar e pagar', texto: 'Use "Aprovar" quando a compra for autorizada e "Marcar como pago" ao final do mês. Usuários recém-criados aparecem como "Aguardando primeiro acesso".' },
+      { titulo: 'Regra dos R$ 2.000', texto: 'Ao chegar a R$ 2.000 de repasse no mês, o residente ganha o benefício de R$ 250 e 3 isenções de repasse para os próximos agendamentos fechados no mesmo mês.' },
+    ] },
+    estoque: { residente: [
+      { titulo: 'Materiais e alertas', texto: 'Veja os materiais do estúdio e as quantidades. Quando um item chega no mínimo, ele fica sinalizado como estoque baixo.' },
+      { titulo: 'Dar saída', texto: 'Use "+ Nova movimentação" para registrar o que você usou. O app mostra a quantidade disponível e não deixa a saída passar do que existe.' },
+      { titulo: 'Corrigir um lançamento', texto: 'Errou? Você pode excluir uma movimentação sua e o estoque volta ao valor anterior. Depois é só lançar de novo.' },
+    ], socio: [
+      { titulo: 'Materiais e alertas', texto: 'Veja todos os materiais, as quantidades e os itens em estoque baixo (quantidade igual ou menor que o mínimo).' },
+      { titulo: 'Cadastrar e dar entrada', texto: 'Use "+ cadastrar material" para criar um item (unidade e quantidade mínima) e "+ Nova movimentação" para registrar entradas e saídas.' },
+      { titulo: 'Ativar e desativar', texto: 'Material desativado sai da lista dos residentes e não recebe movimentações, mas o histórico fica guardado. Você pode reativar quando quiser.' },
+    ] },
+    financeiro: { socio: [
+      { titulo: 'Mês em foco', texto: 'Use as setas para trocar de mês. Tudo carrega sozinho: faturamento, distribuição, situação de cada categoria e lançamentos.' },
+      { titulo: 'Como o dinheiro se divide', texto: 'Operacional e Materiais seguem os orçamentos que você define. Benefícios soma os benefícios do mês, Marketing recebe 20% das entradas e Melhorias fica com o que sobra.' },
+      { titulo: 'Novo lançamento', texto: 'O botão "+ Novo lançamento" registra entradas de caixa, orçamentos (Operacional ou Materiais) e gastos. Em gastos de Materiais há um campo para listar os itens comprados.' },
+      { titulo: 'Fechar e reabrir o mês', texto: 'Fechar consolida os valores e passa os saldos para o mês seguinte. Para corrigir algo, reabra o mês informando o motivo e feche de novo. Tudo fica na auditoria.' },
+    ] },
+    melhorias: { residente: [
+      { titulo: 'Meta coletiva', texto: 'Aqui você acompanha a melhoria que o estúdio está juntando dinheiro para comprar: o nome, o quanto já foi acumulado e a barra de progresso.' },
+      { titulo: 'Quando a meta é atingida', texto: 'Ao chegar em 100% o card fica verde. Depois que o item é comprado e instalado, a próxima melhoria da fila assume o lugar.' },
+    ], socio: [
+      { titulo: 'Melhoria atual', texto: 'O card de destaque mostra a primeira melhoria da fila, o quanto já foi acumulado e quanto falta. Ele vem só da categoria Melhorias do financeiro.' },
+      { titulo: 'Gerenciar a fila', texto: 'Use "+ Adicionar melhoria" para incluir itens e "Editar" para mudar o valor-alvo e a posição. Só dá para excluir itens que ainda estão em progresso.' },
+      { titulo: 'Finalizar', texto: 'Depois de comprar e instalar o item, toque em "Finalizar" e informe o valor realmente gasto. A sobra continua no fundo e a próxima melhoria assume.' },
+    ] },
+    comunicados: { residente: [
+      { titulo: 'Avisos do estúdio', texto: 'Aqui ficam os comunicados publicados pelos sócios. O mais recente aparece primeiro.' },
+      { titulo: 'Comunicado obrigatório', texto: 'Quando um comunicado for obrigatório, o app só libera as outras telas depois que você confirmar a leitura. Se ele for editado, será preciso confirmar a nova versão.' },
+    ], socio: [
+      { titulo: 'Publicar', texto: 'Use o botão fixo no rodapé para criar um comunicado. Marque como obrigatório se os residentes precisarem confirmar a leitura.' },
+      { titulo: 'Editar com versões', texto: 'Cada edição cria uma nova versão e exige um motivo (você pode cadastrar novas categorias de motivo). Você vê o histórico de versões e quem confirmou a leitura.' },
+      { titulo: 'Excluir', texto: 'A exclusão tira o comunicado da lista, mas as versões e o histórico ficam guardados.' },
+    ] },
+    usuarios: { socio: [
+      { titulo: 'Criar usuário', texto: 'Use "+ Novo usuário" e escolha só o perfil. O login e a senha provisória aparecem uma única vez: anote e entregue à pessoa. O resto dos dados ela preenche no primeiro acesso.' },
+      { titulo: 'Gerenciar', texto: 'Em cada usuário você pode ativar ou desativar, trocar o perfil e redefinir a senha. A desativação bloqueia o acesso na hora. Por padrão a lista mostra só os ativos; use o filtro para ver os inativos e a busca por nome.' },
+      { titulo: 'Cuidados', texto: 'Você não pode desativar a sua própria conta. Ao redefinir uma senha, a pessoa recebe uma senha provisória e precisa trocá-la no próximo login.' },
+    ] },
+    perfil: { residente: null, socio: null, comum: [
+      { titulo: 'Seus dados', texto: 'Toque em "Editar perfil" para liberar os campos (nome, e-mail, telefone e CPF). Os dados só são salvos quando você confirmar.' },
+      { titulo: 'Foto de perfil', texto: 'Use "Trocar foto" para escolher uma imagem. A nova foto substitui a anterior.' },
+      { titulo: 'Sair da conta', texto: 'O botão "Sair da conta" fica no fim desta tela. O login dura até 7 dias neste aparelho.' },
+    ] },
+  };
+}
+
+function passosDoTutorial(view) {
+  const t = obterTutoriais()[view];
+  if (!t) return null;
+  const chave = usuarioAtual && usuarioAtual.perfil_id === 1 ? 'socio' : 'residente';
+  const passos = t[chave] || t.comum || null;
+  return passos && passos.length ? passos : null;
+}
+
+function tutorialJaVisto(view) {
+  try { return localStorage.getItem(`toca_tut_${usuarioAtual.id}_${view}`) === '1'; } catch (e) { return false; }
+}
+function marcarTutorialVisto(view) {
+  try { localStorage.setItem(`toca_tut_${usuarioAtual.id}_${view}`, '1'); } catch (e) { /* sem armazenamento: o tutorial pode reaparecer */ }
+}
+
+function agendarTutorial(view) {
+  criarBotaoAjuda();
+  setTimeout(() => {
+    if (window.__viewAtual !== view || !usuarioAtual) return;
+    if (document.getElementById('overlay-ativo') || document.getElementById('tutorial-ativo')) return;
+    if (!passosDoTutorial(view) || tutorialJaVisto(view)) return;
+    abrirTutorial(view);
+  }, 600);
+}
+
+function criarBotaoAjuda() {
+  if (document.getElementById('btn-ajuda')) return;
+  const shell = document.getElementById('app-shell');
+  if (!shell) return;
+  const btn = document.createElement('button');
+  btn.id = 'btn-ajuda';
+  btn.type = 'button';
+  btn.setAttribute('aria-label', 'Ajuda desta tela');
+  btn.textContent = '?';
+  btn.addEventListener('click', () => {
+    if (document.getElementById('tutorial-ativo')) return;
+    abrirTutorial(window.__viewAtual);
+  });
+  shell.insertAdjacentElement('afterend', btn);
+}
+
+function abrirTutorial(view) {
+  const passos = passosDoTutorial(view);
+  if (!passos) {
+    alert('Esta tela não tem tutorial.');
+    return;
+  }
+  marcarTutorialVisto(view);
+  let i = 0;
+  const caixa = document.createElement('div');
+  caixa.id = 'tutorial-ativo';
+  caixa.className = 'tut-fundo';
+  document.body.appendChild(caixa);
+
+  function fechar() {
+    caixa.remove();
+    document.removeEventListener('keydown', teclas);
+  }
+  function teclas(e) { if (e.key === 'Escape') fechar(); }
+  document.addEventListener('keydown', teclas);
+
+  function desenhar() {
+    const p = passos[i];
+    const ultimo = i === passos.length - 1;
+    caixa.innerHTML = `
+      <div class="tut-cartao" role="dialog" aria-modal="true">
+        <div class="tut-topo">
+          <span class="tut-contador">Passo ${i + 1} de ${passos.length}</span>
+          <button type="button" class="tut-pular" data-tut="pular">Pular</button>
+        </div>
+        <h3>${esc(p.titulo)}</h3>
+        <p>${esc(p.texto)}</p>
+        <div class="tut-pontos">${passos.map((_, k) => `<span class="${k === i ? 'ativo' : ''}"></span>`).join('')}</div>
+        <div class="tut-acoes">
+          ${i > 0 ? '<button type="button" class="link-acao" data-tut="voltar">Voltar</button>' : '<span></span>'}
+          <button type="button" class="botao tut-proximo" data-tut="${ultimo ? 'fim' : 'proximo'}">${ultimo ? 'Entendi' : 'Próximo'}</button>
+        </div>
+      </div>`;
+  }
+  caixa.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tut]');
+    if (!b) return;
+    if (b.dataset.tut === 'proximo') { i += 1; desenhar(); }
+    else if (b.dataset.tut === 'voltar') { i -= 1; desenhar(); }
+    else fechar();
+  });
+  desenhar();
+}

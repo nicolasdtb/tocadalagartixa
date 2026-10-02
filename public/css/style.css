@@ -1012,3 +1012,34 @@ form > .botao { width: 100%; }
 @media (max-width: 640px) {
   .conteudo-principal { padding-top: 58px; }
 }
+
+/* ---------- Tutorial ---------- */
+#btn-ajuda {
+  position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: 62px; z-index: 40;
+  width: 40px; height: 40px; border-radius: 50%; display: none; align-items: center; justify-content: center;
+  background: var(--cor-fundo-elevado); color: var(--cor-texto); border: 1px solid var(--cor-borda);
+  font-weight: 700; font-size: 17px; cursor: pointer; font-family: inherit;
+}
+.app-shell.ativo ~ #btn-ajuda { display: flex; }
+#btn-ajuda:hover { border-color: var(--cor-acento); color: var(--cor-acento); }
+
+.tut-fundo {
+  position: fixed; inset: 0; z-index: 400; background: rgba(5,4,8,0.78);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.tut-cartao {
+  width: 100%; max-width: 420px; padding: 22px; border-radius: 20px;
+  background: linear-gradient(180deg, rgba(124,58,237,0.20), transparent 45%), var(--cor-fundo-elevado);
+  border: 1px solid var(--cor-borda); box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+}
+.tut-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.tut-contador { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--cor-texto-fraco); }
+.tut-pular { background: none; border: none; color: var(--cor-texto-fraco); font: inherit; font-size: 13px; cursor: pointer; padding: 4px 6px; }
+.tut-pular:hover { color: var(--cor-texto); }
+.tut-cartao h3 { margin: 0 0 8px; font-family: var(--fonte-titulo); font-size: 22px; }
+.tut-cartao p { margin: 0; color: var(--cor-texto-fraco); font-size: 15px; line-height: 1.55; }
+.tut-pontos { display: flex; gap: 6px; margin: 20px 0 18px; }
+.tut-pontos span { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.15); }
+.tut-pontos span.ativo { width: 22px; border-radius: 999px; background: var(--cor-acento); }
+.tut-acoes { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tut-proximo { width: auto; min-width: 130px; }
