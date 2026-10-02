@@ -223,7 +223,17 @@ const views = {
     const vazio = (t) => `<p class="card-item-meta">${esc(t)}</p>`;
     const dia = (d) => String(d).slice(0, 10);
     const fmtData = (d) => new Date(dia(d) + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
-    const barra = (pct) => `<div class="barra-progresso"><div class="barra-progresso-preenchida" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>`;
+    const barra = (pct) => `<div class="ini-barra"><div class="ini-barra-preenchida" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>`;
+    const brl = (v) => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`;
+    const estilosCard = {
+      agendamentos: { cor: 'roxo', icone: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>' },
+      meta: { cor: 'verde', icone: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6" fill="currentColor"/>' },
+      ranking: { cor: 'escarlate', icone: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4z"/><path d="M17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3"/>' },
+      estoque: { cor: 'roxo', icone: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' },
+      melhorias: { cor: 'verde', icone: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>' },
+      comunicado: { cor: 'escarlate', icone: '<path d="M3 11a9 9 0 0118 0v6a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3"/><path d="M9 19a2 2 0 004 0"/>' },
+      financeiro: { cor: 'verde', icone: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.3c0 3 6 1.4 6 4.3 0 1.4-1.3 2.4-3 2.4s-3-1-3-2.4"/>' },
+    };
 
     // Definição dos cards: cada um carrega o próprio conteúdo de forma independente.
     const definicoes = [
@@ -235,11 +245,18 @@ const views = {
           const proximos = meus
             .filter((a) => dia(a.data) >= hojeStr)
             .sort((a, b) => (dia(a.data) + a.horario).localeCompare(dia(b.data) + b.horario))
-            .slice(0, 5);
+            .slice(0, 3);
           if (!proximos.length) return vazio('Nenhum agendamento pela frente.');
-          return proximos.map((a) => `
-            <div class="inicio-item"><strong>${esc(fmtData(a.data))} · ${esc(a.horario.slice(0, 5))}</strong><span>${esc(a.responsavel)}</span></div>
-          `).join('');
+          return proximos.map((a) => {
+            const d = new Date(dia(a.data) + 'T00:00:00');
+            const hoje = dia(a.data) === hojeStr;
+            return `
+            <div class="ini-agenda ${hoje ? 'ini-agenda-hoje' : ''}">
+              <div class="ini-data"><b>${pad(d.getDate())}</b><small>${esc(d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''))}</small></div>
+              <div class="ini-agenda-info"><strong>${esc(a.horario.slice(0, 5))}</strong><span>${esc(a.responsavel)}</span></div>
+              ${hoje ? '<span class="badge badge-verde">Hoje</span>' : ''}
+            </div>`;
+          }).join('');
         },
       },
       {
@@ -248,11 +265,12 @@ const views = {
           const m = await api.get('/metas/individual');
           const pct = m.nivel_maximo_atingido ? 100 : (m.acumulado_mes / Number(m.proximo_nivel.repasse_minimo)) * 100;
           return `
-            <p class="inicio-valor">R$ ${Number(m.acumulado_mes).toFixed(2)}</p>
+            <p class="inicio-valor">${brl(m.acumulado_mes)}</p>
+            <p class="ini-legenda">repasse acumulado no mês</p>
             ${barra(pct)}
-            <p class="card-item-meta" style="margin-top:10px;">${m.nivel_maximo_atingido
+            <div class="ini-barra-info"><span>${Math.round(Math.min(100, pct))}%</span><span>${m.nivel_maximo_atingido
               ? 'Nível máximo atingido'
-              : `Faltam R$ ${Number(m.falta_para_proximo).toFixed(2)} para o Nível ${m.proximo_nivel.nivel}`}</p>
+              : `Faltam ${brl(m.falta_para_proximo)} para o Nível ${m.proximo_nivel.nivel}`}</span></div>
           `;
         },
       },
@@ -281,7 +299,7 @@ const views = {
           return proximos.map((m) => `
             <div class="inicio-item">
               <strong style="display:flex; align-items:center; gap:6px;">${m.estoque_baixo ? iconeAlerta : ''}${esc(m.nome)}</strong>
-              <span>${Number(m.quantidade)} ${esc(m.unidade)}</span>
+              <span class="ini-qtd ${m.estoque_baixo ? 'ini-qtd-baixo' : ''}">${Number(m.quantidade)} ${esc(m.unidade)}</span>
             </div>
           `).join('');
         },
@@ -294,8 +312,11 @@ const views = {
           return `
             <p class="inicio-destaque">${esc(a.melhoria_atual)}</p>
             ${barra(a.progresso_percentual)}
-            <p class="card-item-meta" style="margin-top:10px;">R$ ${Number(a.valor_acumulado).toFixed(2)} de R$ ${Number(a.valor_alvo).toFixed(2)}
-              ${a.estado === 'meta_atingida' ? '<span class="badge badge-verde">meta atingida</span>' : ''}</p>
+            <div class="ini-barra-info"><span>${Math.round(Math.min(100, a.progresso_percentual))}%</span>${a.estado === 'meta_atingida' ? '<span class="badge badge-verde">Meta atingida</span>' : '<span>em progresso</span>'}</div>
+            <div class="ini-tiles">
+              <div><small>Acumulado</small><strong>${brl(a.valor_acumulado)}</strong></div>
+              <div><small>Meta</small><strong>${brl(a.valor_alvo)}</strong></div>
+            </div>
           `;
         },
       },
@@ -325,10 +346,12 @@ const views = {
         carregar: async () => {
           const p = await api.get(`/financeiro/fechamento/${mesRef}/preview`);
           return `
-            <p class="inicio-valor">R$ ${p.E.toFixed(2)}</p>
-            <p class="card-item-meta" style="margin-bottom:10px;">entradas no mês</p>
-            <div class="inicio-item"><span>Destinado a Melhorias</span><strong>R$ ${p.I.toFixed(2)}</strong></div>
-            <div class="inicio-item"><span>Marketing</span><strong>R$ ${p.K.toFixed(2)}</strong></div>
+            <p class="inicio-valor">${brl(p.E)}</p>
+            <p class="ini-legenda">entradas no mês</p>
+            <div class="ini-tiles">
+              <div><small>Melhorias</small><strong>${brl(p.I)}</strong></div>
+              <div><small>Marketing</small><strong>${brl(p.K)}</strong></div>
+            </div>
           `;
         },
       },
@@ -387,7 +410,7 @@ const views = {
         const def = disponiveis.find((d) => d.id === id);
         const corpo = id in conteudos ? conteudos[id] : '<p class="card-item-meta">Carregando...</p>';
         return `
-          <section class="inicio-card ${modoEdicao ? 'editando' : ''}" data-card="${id}" ${modoEdicao ? 'draggable="true"' : ''}>
+          <section class="inicio-card cor-${(estilosCard[id] || {}).cor || 'roxo'} ${modoEdicao ? 'editando' : ''}" data-card="${id}" ${modoEdicao ? 'draggable="true"' : ''}>
             ${modoEdicao ? `
               <div class="inicio-controles">
                 <button type="button" class="link-acao" data-mover="cima" data-id="${id}" ${i === 0 ? 'disabled' : ''} aria-label="Mover para cima">${chevronCima}</button>
@@ -395,8 +418,9 @@ const views = {
                 <button type="button" class="link-acao link-acao-erro" data-ocultar="${id}">Ocultar</button>
               </div>` : ''}
             <div class="inicio-card-topo">
+              <span class="inicio-icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${(estilosCard[id] || {}).icone || ''}</svg></span>
               <h3>${def.titulo}</h3>
-              ${def.destino && !modoEdicao ? `<button type="button" class="link-acao" data-ir="${def.destino}">Abrir</button>` : ''}
+              ${def.destino && !modoEdicao ? `<button type="button" class="inicio-abrir" data-ir="${def.destino}" aria-label="Abrir ${def.titulo}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>` : ''}
             </div>
             <div class="inicio-card-corpo">${corpo}</div>
           </section>
@@ -1281,6 +1305,38 @@ const views = {
   async melhorias(container) {
     container.innerHTML = '<h2>Melhorias</h2><p>Carregando...</p>';
     const ehSocio = usuarioAtual.perfil_id === 1;
+    const brl = (v) => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`;
+
+    // Card de destaque com a melhoria atual (usado por sócio e residente)
+    function heroMelhoria(a) {
+      const ultima = a?.ultima_melhoria_adquirida
+        ? `<p class="mel-ultima">✔ Última adquirida: <strong>${esc(a.ultima_melhoria_adquirida.nome)}</strong></p>` : '';
+      if (!a || !a.melhoria_atual) {
+        return `<div class="mel-hero">
+          <span class="mel-rotulo">Melhoria atual</span>
+          <p class="mel-vazio">${esc(a?.mensagem || 'Nenhuma melhoria em andamento no momento.')}</p>
+          ${ultima}
+        </div>`;
+      }
+      const pct = Math.min(100, Number(a.progresso_percentual) || 0);
+      const falta = Math.max(0, Number(a.valor_alvo) - Number(a.valor_acumulado));
+      const atingida = a.estado === 'meta_atingida';
+      return `<div class="mel-hero ${atingida ? 'mel-hero-atingida' : ''}">
+        <div class="mel-hero-topo">
+          <span class="mel-rotulo">Melhoria atual</span>
+          ${atingida ? '<span class="badge badge-verde">Meta atingida</span>' : ''}
+        </div>
+        <h3 class="mel-hero-nome">${esc(a.melhoria_atual)}</h3>
+        <div class="mel-barra"><div class="mel-barra-preenchida" style="width:${pct}%"></div></div>
+        <div class="mel-hero-pct"><strong>${Math.round(pct)}%</strong> concluído</div>
+        <div class="mel-stats">
+          <div><small>Acumulado</small><strong>${brl(a.valor_acumulado)}</strong></div>
+          <div><small>Meta</small><strong>${brl(a.valor_alvo)}</strong></div>
+          <div><small>${atingida ? 'Situação' : 'Falta'}</small><strong>${atingida ? 'Pronta para comprar' : brl(falta)}</strong></div>
+        </div>
+        ${ultima}
+      </div>`;
+    }
 
     if (!ehSocio) {
       let atual;
@@ -1290,39 +1346,22 @@ const views = {
         container.innerHTML = '<h2>Melhorias</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
         return;
       }
-
-      if (!atual.melhoria_atual) {
-        container.innerHTML = `
-          <h2>Melhorias</h2>
-          <p>${atual.mensagem}</p>
-          ${atual.ultima_melhoria_adquirida ? `<p style="color:var(--cor-texto-fraco);">Última adquirida: ${atual.ultima_melhoria_adquirida.nome}</p>` : ''}
-        `;
-        return;
-      }
-
-      container.innerHTML = `
-        <h2>Melhorias</h2>
-        <div class="painel-form" style="max-width:480px;">
-          <p style="color:var(--cor-texto-fraco); margin-top:0;">Melhoria atual</p>
-          <p style="font-size:24px; font-family: var(--fonte-titulo); margin:0 0 16px;">${atual.melhoria_atual}</p>
-          <div class="barra-progresso"><div class="barra-progresso-preenchida" style="width:${Math.min(100, atual.progresso_percentual)}%"></div></div>
-          <p style="margin-top:12px; color:var(--cor-texto-fraco);">
-            R$ ${Number(atual.valor_acumulado).toFixed(2)} de R$ ${Number(atual.valor_alvo).toFixed(2)}
-            ${atual.estado === 'meta_atingida' ? '<span class="badge badge-verde" style="margin-left:8px;">meta atingida</span>' : ''}
-          </p>
-          ${atual.ultima_melhoria_adquirida ? `<p style="margin-top:16px; font-size:13px; color:var(--cor-texto-fraco);">Última adquirida: ${atual.ultima_melhoria_adquirida.nome}</p>` : ''}
-        </div>
-      `;
+      container.innerHTML = `<h2>Melhorias</h2><div class="mel-coluna">${heroMelhoria(atual)}</div>`;
       return;
     }
 
     // Visão do sócio: fila completa
     let fila = [];
+    let atual = null;
     try {
-      fila = await api.get('/melhorias');
+      [fila, atual] = await Promise.all([api.get('/melhorias'), api.get('/melhorias/atual')]);
     } catch (e) {
       container.innerHTML = '<h2>Melhorias</h2><div class="mensagem-erro visivel">Erro ao carregar</div>';
       return;
+    }
+    async function recarregar() {
+      [fila, atual] = await Promise.all([api.get('/melhorias'), api.get('/melhorias/atual')]);
+      renderFila();
     }
 
     const nomesEstado = { em_progresso: 'Em progresso', meta_atingida: 'Meta atingida', finalizada: 'Finalizada' };
@@ -1330,26 +1369,42 @@ const views = {
 
     container.innerHTML = `
       <h2>Melhorias</h2>
-      <div id="lista-melhorias" class="lista-cards"></div>
+      <div id="mel-area">
+        <div id="mel-hero-area" class="mel-coluna-larga"></div>
+        <h3 class="mel-secao">Fila de melhorias</h3>
+        <div id="lista-melhorias" class="lista-compacta"></div>
+        <details class="mel-finalizadas" id="mel-finalizadas-box">
+          <summary id="mel-finalizadas-titulo">Finalizadas</summary>
+          <div id="lista-finalizadas" class="lista-compacta"></div>
+        </details>
+      </div>
     `;
 
     function renderFila() {
-      const alvo = document.getElementById('lista-melhorias');
-      alvo.innerHTML = [...fila].sort((a, b) => a.prioridade - b.prioridade).map((m) => `
-        <div class="card-item">
-          <div class="card-item-topo">
-            <h3>${m.prioridade}º · ${m.nome}</h3>
-            <span class="badge ${badgeEstado[m.estado]}" ${!badgeEstado[m.estado] ? 'style="background:rgba(255,255,255,0.08); border:1px solid var(--cor-borda); color:var(--cor-texto-fraco);"' : ''}>${nomesEstado[m.estado]}</span>
-          </div>
-          <p class="card-item-meta">Valor-alvo: R$ ${Number(m.valor_alvo).toFixed(2)}</p>
-          <div class="card-item-acoes">
-            ${m.estado !== 'finalizada' ? `<button class="link-acao" data-acao="editar" data-id="${m.id}">Editar</button>` : ''}
-            ${m.estado !== 'finalizada' ? `<button class="link-acao" data-acao="finalizar" data-id="${m.id}">Finalizar</button>` : ''}
-            ${m.estado === 'em_progresso' ? `<button class="link-acao link-acao-erro" data-acao="excluir" data-id="${m.id}">Excluir</button>` : ''}
-          </div>
-        </div>
-      `).join('') || '<p style="color:var(--cor-texto-fraco);">Fila vazia.</p>';
+      document.getElementById('mel-hero-area').innerHTML = heroMelhoria(atual);
+      const ordenada = [...fila].sort((a, b) => a.prioridade - b.prioridade);
+      const abertas = ordenada.filter((m) => m.estado !== 'finalizada');
+      const finalizadas = ordenada.filter((m) => m.estado === 'finalizada');
+      const atualId = abertas[0]?.id;
 
+      const linha = (m) => `
+        <div class="card-item mel-linha ${m.id === atualId ? 'mel-linha-atual' : ''} ${m.estado === 'finalizada' ? 'mel-linha-final' : ''}">
+          <span class="mel-pos">${m.prioridade}</span>
+          <div class="mel-info">
+            <strong>${esc(m.nome)}</strong>
+            <small>${m.estado === 'finalizada' ? `Gasto real ${brl(m.valor_gasto)} · meta era ${brl(m.valor_alvo)}` : `Valor-alvo ${brl(m.valor_alvo)}`}</small>
+          </div>
+          <span class="mel-estado"><span class="badge ${badgeEstado[m.estado]}" ${!badgeEstado[m.estado] ? 'style="background:rgba(255,255,255,0.08); border:1px solid var(--cor-borda); color:var(--cor-texto-fraco);"' : ''}>${nomesEstado[m.estado]}</span></span>
+          <span class="mel-acoes">${m.estado !== 'finalizada' ? `<button class="link-acao" data-acao="editar" data-id="${m.id}">Editar</button><button class="link-acao" data-acao="finalizar" data-id="${m.id}">Finalizar</button>` : ''}${m.estado === 'em_progresso' ? `<button class="link-acao link-acao-erro" data-acao="excluir" data-id="${m.id}">Excluir</button>` : ''}</span>
+        </div>`;
+
+      document.getElementById('lista-melhorias').innerHTML = abertas.map(linha).join('') || '<p class="card-item-meta">Nenhuma melhoria na fila. Use o botão abaixo para adicionar.</p>';
+      document.getElementById('lista-finalizadas').innerHTML = finalizadas.map(linha).join('');
+      const caixa = document.getElementById('mel-finalizadas-box');
+      caixa.style.display = finalizadas.length ? '' : 'none';
+      document.getElementById('mel-finalizadas-titulo').textContent = `Finalizadas (${finalizadas.length})`;
+
+      const alvo = document.getElementById('mel-area');
       alvo.querySelectorAll('[data-acao="editar"]').forEach((btn) => {
         btn.addEventListener('click', () => abrirFormularioMelhoria({ modo: 'editar', melhoria: fila.find((m) => String(m.id) === String(btn.dataset.id)) }));
       });
@@ -1361,8 +1416,7 @@ const views = {
           if (!confirm('Remover este item da fila?')) return;
           try {
             await api.delete(`/melhorias/${btn.dataset.id}`);
-            fila = fila.filter((m) => String(m.id) !== String(btn.dataset.id));
-            renderFila();
+            await recarregar();
           } catch (err) {
             alert(err.dados?.erro || 'Erro ao excluir');
           }
@@ -1390,19 +1444,17 @@ const views = {
         erroEl.classList.remove('visivel');
         try {
           if (modo === 'criar') {
-            const criada = await api.post('/melhorias', {
+            await api.post('/melhorias', {
               nome: document.getElementById('mel2-nome').value.trim(),
               valor_alvo: Number(document.getElementById('mel2-valor').value),
               prioridade: Number(document.getElementById('mel2-prioridade').value),
             });
-            fila.push({ ...criada, estado: 'em_progresso' });
           } else {
             await api.patch(`/melhorias/${melhoria.id}/valor-alvo`, { valor_alvo: Number(document.getElementById('mel2-valor').value) });
             await api.patch(`/melhorias/${melhoria.id}/prioridade`, { prioridade: Number(document.getElementById('mel2-prioridade').value) });
-            fila = await api.get('/melhorias');
           }
           fecharOverlay();
-          renderFila();
+          await recarregar();
         } catch (err) {
           erroEl.textContent = err.dados?.erro || 'Erro ao salvar';
           erroEl.classList.add('visivel');
@@ -1432,8 +1484,7 @@ const views = {
           });
           fecharOverlay();
           alert('Melhoria finalizada. Lembre-se de fechar/reabrir o mês no Financeiro para o saldo refletir o gasto.');
-          fila = await api.get('/melhorias');
-          renderFila();
+          await recarregar();
         } catch (err) {
           erroEl.textContent = err.dados?.erro || 'Erro ao finalizar';
           erroEl.classList.add('visivel');
