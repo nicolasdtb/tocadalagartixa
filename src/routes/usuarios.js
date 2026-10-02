@@ -198,7 +198,7 @@ router.post('/trocar-senha', require('../middlewares/auth').requireAuth, async (
 router.get('/me', require('../middlewares/auth').requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, email, telefone, cpf, login, perfil_id FROM tocadalagartixa.usuarios WHERE id = $1',
+      'SELECT id, nome, email, telefone, cpf, login, perfil_id, foto FROM tocadalagartixa.usuarios WHERE id = $1',
       [req.session.usuario.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ erro: 'Usuário não encontrado' });
@@ -209,9 +209,9 @@ router.get('/me', require('../middlewares/auth').requireAuth, async (req, res) =
   }
 });
 
-// Editar os próprios dados (nome/email/telefone/cpf) — não mexe em login/senha
+// Editar os próprios dados (nome/email/telefone/cpf/foto) — não mexe em login/senha
 router.put('/me', require('../middlewares/auth').requireAuth, async (req, res) => {
-  const { nome, email, telefone, cpf } = req.body;
+  const { nome, email, telefone, cpf, foto } = req.body;
   const CPF_REGEX = /^\d{11}$/;
   const TELEFONE_REGEX = /^\d{10,11}$/;
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -222,13 +222,23 @@ router.put('/me', require('../middlewares/auth').requireAuth, async (req, res) =
   if (!EMAIL_REGEX.test(email)) return res.status(400).json({ erro: 'E-mail em formato inválido' });
   if (!TELEFONE_REGEX.test(telefone)) return res.status(400).json({ erro: 'Telefone em formato inválido (somente números, 10 ou 11 dígitos)' });
   if (!CPF_REGEX.test(cpf)) return res.status(400).json({ erro: 'CPF em formato inválido (11 dígitos, somente números)' });
+  // Limite generoso o bastante pra uma foto de perfil pequena (~1.3MB em base64), sem virar depósito de arquivo grande.
+  if (foto && foto.length > 1_800_000) {
+    return res.status(400).json({ erro: 'Foto muito grande. Escolha uma imagem menor.' });
+  }
 
   try {
-    const result = await pool.query(
-      `UPDATE tocadalagartixa.usuarios SET nome = $1, email = $2, telefone = $3, cpf = $4, updated_at = now()
-       WHERE id = $5 RETURNING id, nome, email, telefone, cpf, login`,
-      [nome, email, telefone, cpf, req.session.usuario.id]
-    );
+    const result = foto
+      ? await pool.query(
+          `UPDATE tocadalagartixa.usuarios SET nome = $1, email = $2, telefone = $3, cpf = $4, foto = $5, updated_at = now()
+           WHERE id = $6 RETURNING id, nome, email, telefone, cpf, login, foto`,
+          [nome, email, telefone, cpf, foto, req.session.usuario.id]
+        )
+      : await pool.query(
+          `UPDATE tocadalagartixa.usuarios SET nome = $1, email = $2, telefone = $3, cpf = $4, updated_at = now()
+           WHERE id = $5 RETURNING id, nome, email, telefone, cpf, login, foto`,
+          [nome, email, telefone, cpf, req.session.usuario.id]
+        );
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ erro: 'CPF já cadastrado para outro usuário' });

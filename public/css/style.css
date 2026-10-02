@@ -762,3 +762,15 @@ form > .botao { width: 100%; }
   .card-item-linha { font-size: 13px; }
   .fin-lanc-valor { margin-left: 0; }
 }
+
+/* ---------- Meu Perfil: avatar ---------- */
+.perfil-avatar-area { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.perfil-avatar { width: 80px; height: 80px; border-radius: 50%; overflow: hidden; flex-shrink: 0; border: 2px solid var(--cor-acento); }
+.perfil-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.perfil-avatar-vazio {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(124,58,237,0.18); color: #d8c4ff;
+  font-family: var(--fonte-titulo); font-size: 32px; font-weight: 700;
+}
+.campo input:disabled { opacity: 0.7; cursor: default; }

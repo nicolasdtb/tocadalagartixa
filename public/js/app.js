@@ -1789,55 +1789,105 @@ const views = {
       return;
     }
 
-    container.innerHTML = `
-      <h2>Meu Perfil</h2>
-      <div class="painel-form" style="max-width:420px;">
-        <p class="card-item-meta" style="margin-top:0;">Login: <strong style="color:var(--cor-texto);">${esc(dados.login)}</strong></p>
-        <div id="erro-perfil" class="mensagem-erro"></div>
-        <div id="sucesso-perfil" class="mensagem-sucesso oculto"></div>
-        <form id="form-perfil">
-          <div class="campo"><label for="pf-nome">Nome completo</label><input type="text" id="pf-nome" value="${esc(dados.nome || '')}" required></div>
-          <div class="campo"><label for="pf-email">E-mail</label><input type="email" id="pf-email" value="${esc(dados.email || '')}" required></div>
-          <div class="campo"><label for="pf-telefone">Telefone (só números)</label><input type="text" id="pf-telefone" value="${esc(dados.telefone || '')}" required></div>
-          <div class="campo"><label for="pf-cpf">CPF (só números)</label><input type="text" id="pf-cpf" value="${esc(dados.cpf || '')}" required></div>
-          <button type="submit" class="botao">Salvar alterações</button>
-        </form>
-      </div>
+    let fotoNova = null; // foto escolhida nesta edição, ainda não salva
+    let editando = false;
 
-      <div class="painel-form" style="max-width:420px; margin-top:20px;">
-        <h3 style="margin-top:0;">Senha</h3>
-        <p class="card-item-meta">Para trocar sua senha, use a opção de redefinição com o sócio, ou o fluxo de troca obrigatória se estiver com senha provisória.</p>
-      </div>
+    function avatarHtml(foto) {
+      if (foto) return `<img src="${foto}" class="perfil-avatar-img" alt="Foto de perfil">`;
+      const inicial = (dados.nome || dados.login || '?').trim().charAt(0).toUpperCase();
+      return `<div class="perfil-avatar-vazio">${esc(inicial)}</div>`;
+    }
 
-      <button type="button" class="botao" id="botao-sair-perfil" style="max-width:420px; margin-top:20px; background:var(--cor-vermelho);">Sair da conta</button>
-    `;
+    function render() {
+      const dis = editando ? '' : 'disabled';
+      container.innerHTML = `
+        <h2>Meu Perfil</h2>
+        <div class="painel-form" style="max-width:420px;">
+          <div class="perfil-avatar-area">
+            <div class="perfil-avatar">${avatarHtml(fotoNova || dados.foto)}</div>
+            ${editando ? `<label class="link-acao" style="cursor:pointer;">Trocar foto<input type="file" id="pf-foto-input" accept="image/*" class="oculto"></label>` : ''}
+          </div>
+          <p class="card-item-meta">Login: <strong style="color:var(--cor-texto);">${esc(dados.login)}</strong></p>
+          <div id="erro-perfil" class="mensagem-erro"></div>
+          <form id="form-perfil">
+            <div class="campo"><label for="pf-nome">Nome completo</label><input type="text" id="pf-nome" value="${esc(dados.nome || '')}" ${dis} required></div>
+            <div class="campo"><label for="pf-email">E-mail</label><input type="email" id="pf-email" value="${esc(dados.email || '')}" ${dis} required></div>
+            <div class="campo"><label for="pf-telefone">Telefone (só números)</label><input type="text" id="pf-telefone" value="${esc(dados.telefone || '')}" ${dis} required></div>
+            <div class="campo"><label for="pf-cpf">CPF (só números)</label><input type="text" id="pf-cpf" value="${esc(dados.cpf || '')}" ${dis} required></div>
+            ${editando
+              ? `<button type="submit" class="botao">Salvar alterações</button>
+                 <button type="button" class="botao botao-secundario" id="botao-cancelar-perfil" style="margin-top:8px;">Cancelar</button>`
+              : `<button type="button" class="botao" id="botao-editar-perfil">Editar perfil</button>`}
+          </form>
+        </div>
 
-    document.getElementById('form-perfil').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const erroEl = document.getElementById('erro-perfil');
-      const sucessoEl = document.getElementById('sucesso-perfil');
-      erroEl.classList.remove('visivel');
-      sucessoEl.classList.add('oculto');
-      try {
-        await api.put('/usuarios/me', {
-          nome: document.getElementById('pf-nome').value.trim(),
-          email: document.getElementById('pf-email').value.trim(),
-          telefone: document.getElementById('pf-telefone').value.trim(),
-          cpf: document.getElementById('pf-cpf').value.trim(),
+        <div class="painel-form" style="max-width:420px; margin-top:20px;">
+          <h3 style="margin-top:0;">Senha</h3>
+          <p class="card-item-meta">Para trocar sua senha, peça a redefinição a um sócio.</p>
+        </div>
+
+        <button type="button" class="botao" id="botao-sair-perfil" style="max-width:420px; width:100%; margin-top:20px; background:var(--cor-vermelho);">Sair da conta</button>
+      `;
+
+      if (editando) {
+        document.getElementById('pf-foto-input').addEventListener('change', (e) => {
+          const arquivo = e.target.files[0];
+          if (!arquivo) return;
+          if (arquivo.size > 1300000) {
+            alert('Imagem muito grande. Escolha uma foto de até ~1,3 MB.');
+            return;
+          }
+          const leitor = new FileReader();
+          leitor.onload = () => {
+            fotoNova = leitor.result;
+            document.querySelector('.perfil-avatar').innerHTML = avatarHtml(fotoNova);
+          };
+          leitor.readAsDataURL(arquivo);
         });
-        usuarioAtual.nome = document.getElementById('pf-nome').value.trim();
-        document.getElementById('usuario-logado-nome').textContent = usuarioAtual.nome;
-        sucessoEl.textContent = 'Dados atualizados com sucesso.';
-        sucessoEl.classList.remove('oculto');
-      } catch (err) {
-        erroEl.textContent = err.dados?.erro || 'Erro ao salvar';
-        erroEl.classList.add('visivel');
-      }
-    });
 
-    document.getElementById('botao-sair-perfil').addEventListener('click', () => {
-      if (confirm('Deseja realmente sair da conta?')) fazerLogout();
-    });
+        document.getElementById('botao-cancelar-perfil').addEventListener('click', () => {
+          editando = false;
+          fotoNova = null;
+          render();
+        });
+
+        document.getElementById('form-perfil').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const erroEl = document.getElementById('erro-perfil');
+          erroEl.classList.remove('visivel');
+          try {
+            const corpo = {
+              nome: document.getElementById('pf-nome').value.trim(),
+              email: document.getElementById('pf-email').value.trim(),
+              telefone: document.getElementById('pf-telefone').value.trim(),
+              cpf: document.getElementById('pf-cpf').value.trim(),
+            };
+            if (fotoNova) corpo.foto = fotoNova;
+            const atualizado = await api.put('/usuarios/me', corpo);
+            dados = { ...dados, ...atualizado };
+            usuarioAtual.nome = dados.nome;
+            document.getElementById('usuario-logado-nome').textContent = usuarioAtual.nome;
+            editando = false;
+            fotoNova = null;
+            render();
+          } catch (err) {
+            erroEl.textContent = err.dados?.erro || 'Erro ao salvar';
+            erroEl.classList.add('visivel');
+          }
+        });
+      } else {
+        document.getElementById('botao-editar-perfil').addEventListener('click', () => {
+          editando = true;
+          render();
+        });
+      }
+
+      document.getElementById('botao-sair-perfil').addEventListener('click', () => {
+        if (confirm('Deseja realmente sair da conta?')) fazerLogout();
+      });
+    }
+
+    render();
   },
 };
 
