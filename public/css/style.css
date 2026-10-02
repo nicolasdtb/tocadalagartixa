@@ -774,3 +774,98 @@ form > .botao { width: 100%; }
   font-family: var(--fonte-titulo); font-size: 32px; font-weight: 700;
 }
 .campo input:disabled { opacity: 0.7; cursor: default; }
+
+/* ---------- Lançamentos (grid estruturado; reutilizável em Benefícios) ---------- */
+.lanc-linha {
+  display: grid;
+  grid-template-columns: 92px 150px 1fr 90px 120px;
+  grid-template-areas: "tipo cat desc data valor" "itens itens itens itens itens";
+  align-items: center;
+  column-gap: 16px;
+  padding: 12px 16px;
+}
+.lanc-tipo { grid-area: tipo; justify-self: start; }
+.lanc-cat { grid-area: cat; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lanc-desc { grid-area: desc; color: var(--cor-texto-fraco); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lanc-data { grid-area: data; color: var(--cor-texto-fraco); font-size: 12px; }
+.lanc-valor { grid-area: valor; font-weight: 700; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .lanc-linha {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "cat   valor"
+      "desc  desc"
+      "tipo  data"
+      "itens itens";
+    row-gap: 0;
+    column-gap: 12px;
+  }
+  .lanc-desc { white-space: normal; }
+  .lanc-data { justify-self: end; }
+}
+.lanc-itens { display: block; margin-top: 2px; font-size: 12px; opacity: .8; white-space: normal; }
+.campo textarea { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--cor-borda); background: var(--cor-fundo); color: var(--cor-texto); font: inherit; resize: vertical; }
+.lanc-itens-corpo { grid-area: itens; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--cor-fundo); font-size: 13px; white-space: pre-wrap; }
+.lanc-itens-corpo.oculto { display: none; }
+.lanc-itens-btn { margin-left: 6px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--cor-acento); background: transparent; color: var(--cor-acento); font-size: 11px; cursor: pointer; }
+@media (max-width: 640px) {
+  .lanc-desc, .lanc-tipo, .lanc-data { margin-top: 6px; }
+}
+
+/* ---------- Benefícios (mesmo padrão de grade dos lançamentos) ---------- */
+.ben-linha {
+  display: grid;
+  grid-template-columns: 240px 130px 130px 130px 1fr;
+  grid-template-areas: "nome repasse valor status acao";
+  align-items: center;
+  column-gap: 16px;
+  padding: 12px 16px;
+}
+.ben-nome { grid-area: nome; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ben-repasse { grid-area: repasse; }
+.ben-valor { grid-area: valor; }
+.ben-repasse, .ben-valor { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ben-repasse small, .ben-valor small { display: block; font-size: 11px; font-weight: 400; color: var(--cor-texto-fraco); }
+.ben-status { grid-area: status; }
+.ben-acao { grid-area: acao; text-align: right; }
+@media (max-width: 640px) {
+  .ben-linha {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "nome   status"
+      "repasse valor"
+      "acao   acao";
+    row-gap: 8px;
+  }
+  .ben-status { justify-self: end; }
+  .ben-acao { text-align: left; }
+  .ben-acao:empty { display: none; }
+}
+.ben-sem-nome { font-weight: 400; color: var(--cor-texto-fraco); font-size: 13px; }
+
+/* ---------- Notificações ---------- */
+#sino-notif {
+  position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); right: 16px; z-index: 40;
+  width: 42px; height: 42px; border-radius: 50%;
+  display: none; align-items: center; justify-content: center;
+  background: var(--cor-fundo-elevado); color: var(--cor-texto);
+  border: 1px solid var(--cor-borda); cursor: pointer;
+}
+.app-shell.ativo ~ #sino-notif { display: flex; }
+#sino-notif svg { width: 21px; height: 21px; }
+#sino-notif-contador {
+  position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--cor-vermelho); color: #fff;
+  font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+#sino-notif-contador.oculto { display: none; }
+.notif-lista { display: flex; flex-direction: column; gap: 10px; }
+.notif-item {
+  text-align: left; display: flex; flex-direction: column; gap: 2px; width: 100%;
+  padding: 12px 14px; border-radius: 12px; cursor: pointer; font: inherit; color: var(--cor-texto);
+  background: var(--cor-fundo); border: 1px solid var(--cor-borda); border-left: 4px solid var(--cor-acento);
+}
+.notif-item span { font-size: 13px; color: var(--cor-texto-fraco); }
+.notif-alerta { border-left-color: var(--cor-vermelho); }
+.notif-sucesso { border-left-color: var(--cor-sucesso); }

@@ -186,6 +186,7 @@ document.querySelectorAll('.nav-item').forEach((botao) => {
 
 function navegarPara(view) {
   esconderBotaoFixoRodape();
+  atualizarNotificacoes();
   document.querySelectorAll('.nav-item').forEach((b) => {
     b.classList.toggle('ativo', b.dataset.view === view);
   });
@@ -769,23 +770,20 @@ const views = {
 
       container.innerHTML = `
         <h2>Benefícios</h2>
-        <div id="lista-beneficios" class="lista-cards"></div>
+        <div id="lista-beneficios" class="lista-compacta"></div>
       `;
 
       function renderResumo() {
         const alvo = document.getElementById('lista-beneficios');
+        const brl = (v) => `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
         alvo.innerHTML = resumo.map((r) => `
-          <div class="card-item">
-            <div class="card-item-topo">
-              <h3>${r.nome}</h3>
-              ${r.status_id ? `<span class="badge ${badgeStatus[r.status_id]}">${nomesStatus[r.status_id]}</span>` : ''}
-            </div>
-            <p class="card-item-meta">Repasse acumulado: R$ ${Number(r.repasse_acumulado).toFixed(2)}</p>
-            ${r.valor_beneficio ? `<p class="card-item-meta">Benefício: R$ ${Number(r.valor_beneficio).toFixed(2)}</p>` : ''}
-            <div class="card-item-acoes">
-              ${r.status_id === 1 ? `<button class="link-acao" data-acao="aprovar" data-id="${r.beneficio_id}">Aprovar</button>` : ''}
-              ${r.status_id === 2 ? `<button class="link-acao" data-acao="pagar" data-id="${r.beneficio_id}">Marcar como pago</button>` : ''}
-            </div>
+          <div class="card-item ben-linha">
+            <span class="ben-nome">${r.nome ? esc(r.nome) : '<em class="ben-sem-nome">Aguardando primeiro acesso</em>'}</span>
+            <span class="ben-repasse"><small>Repasse</small>${brl(r.repasse_acumulado)}</span>
+            <span class="ben-valor"><small>Benefício</small>${r.valor_beneficio ? brl(r.valor_beneficio) : '—'}</span>
+            <span class="ben-status">${r.status_id ? `<span class="badge ${badgeStatus[r.status_id]}">${nomesStatus[r.status_id]}</span>` : '<span class="lanc-data">Sem solicitação</span>'}</span>
+            <span class="ben-acao">${r.status_id === 1 ? `<button class="link-acao" data-acao="aprovar" data-id="${r.beneficio_id}">Aprovar</button>` : ''}
+              ${r.status_id === 2 ? `<button class="link-acao" data-acao="pagar" data-id="${r.beneficio_id}">Marcar como pago</button>` : ''}</span>
           </div>
         `).join('') || '<p style="color:var(--cor-texto-fraco);">Nenhum residente ativo.</p>';
 
@@ -1134,16 +1132,25 @@ const views = {
       elLanc.innerHTML = lancamentos.map((l) => {
         const catExibicao = CATS.find((c) => chavesBanco[c.id] === l.categoria)?.nome || l.categoria || 'Entrada geral';
         return `
-        <div class="card-item card-item-linha">
-          <span class="badge ${badgeTipoLancamento[l.tipo_id]}">${nomesTipoLancamento[l.tipo_id]}</span>
-          <span class="fin-lanc-cat">${esc(catExibicao)}</span>
-          <span class="fin-lanc-desc">${esc(l.descricao || '—')}</span>
-          <span class="fin-lanc-data">${new Date(l.created_at).toLocaleDateString('pt-BR')}</span>
-          <span class="fin-lanc-valor" style="color:${l.tipo_id === 1 ? 'var(--cor-sucesso)' : 'var(--cor-vermelho)'};">${l.tipo_id === 1 ? '+' : '-'} R$ ${Number(l.valor).toFixed(2)}</span>
+        <div class="card-item lanc-linha">
+          <span class="badge lanc-tipo ${badgeTipoLancamento[l.tipo_id]}">${nomesTipoLancamento[l.tipo_id]}</span>
+          <span class="lanc-cat">${esc(catExibicao)}</span>
+          <span class="lanc-desc">${esc(l.descricao || '—')}${l.itens ? ' <button type="button" class="lanc-itens-btn">Ver itens</button>' : ''}</span>
+          ${l.itens ? `<div class="lanc-itens-corpo oculto"><strong>Materiais:</strong> ${esc(l.itens)}</div>` : ''}
+          <span class="lanc-data">${new Date(l.created_at).toLocaleDateString('pt-BR')}</span>
+          <span class="lanc-valor" style="color:${l.tipo_id === 1 ? 'var(--cor-sucesso)' : 'var(--cor-vermelho)'};">${l.tipo_id === 1 ? '+' : '-'} R$ ${Number(l.valor).toFixed(2).replace('.', ',')}</span>
         </div>
       `;
       }).join('') || '<p class="card-item-meta">Nenhum lançamento neste mês.</p>';
     }
+
+    document.getElementById('fin-lancamentos').addEventListener('click', (e) => {
+      const btn = e.target.closest('.lanc-itens-btn');
+      if (!btn) return;
+      const corpo = btn.closest('.lanc-linha').querySelector('.lanc-itens-corpo');
+      const aberto = !corpo.classList.toggle('oculto');
+      btn.textContent = aberto ? 'Ocultar itens' : 'Ver itens';
+    });
 
     function categoriasParaTipo(tipo) {
       if (tipo === 'orcamento') return [1, 2];
@@ -1168,6 +1175,7 @@ const views = {
           </div>
           <div class="campo"><label for="fl-valor">Valor (R$)</label><input type="number" id="fl-valor" min="0.01" step="0.01" required></div>
           <div class="campo" id="fl-desc-wrapper"><label for="fl-desc">Descrição (opcional)</label><input type="text" id="fl-desc"></div>
+          <div class="campo oculto" id="fl-itens-wrapper"><label for="fl-itens">Materiais / itens (opcional)</label><textarea id="fl-itens" rows="3" placeholder="Ex.: 2x agulha 5RL, 1x tinta preta 30ml..."></textarea></div>
           <button type="submit" class="botao">Registrar</button>
         </form>
       `;
@@ -1184,9 +1192,16 @@ const views = {
           sel.innerHTML = categoriasParaTipo(tipo).map((id) => `<option value="${id}">${CATS.find((c) => c.id === id).nome}</option>`).join('');
         }
         document.getElementById('fl-desc-wrapper').classList.toggle('oculto', tipo === 'orcamento');
+        atualizarItens();
+      }
+      function atualizarItens() {
+        const tipo = document.getElementById('fl-tipo').value;
+        const cat = Number(document.getElementById('fl-categoria')?.value);
+        document.getElementById('fl-itens-wrapper').classList.toggle('oculto', !(tipo === 'gasto' && cat === 2));
       }
       atualizarCategorias();
       document.getElementById('fl-tipo').addEventListener('change', atualizarCategorias);
+      document.getElementById('fl-categoria').addEventListener('change', atualizarItens);
 
       document.getElementById('form-lancamento-overlay').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1196,6 +1211,7 @@ const views = {
         const valor = Number(document.getElementById('fl-valor').value);
         const descricao = document.getElementById('fl-desc').value || undefined;
         const categoria_id = Number(document.getElementById('fl-categoria')?.value);
+        const itens = (tipo === 'gasto' && categoria_id === 2) ? (document.getElementById('fl-itens').value.trim() || undefined) : undefined;
 
         try {
           if (tipo === 'entrada') {
@@ -1203,7 +1219,7 @@ const views = {
           } else if (tipo === 'orcamento') {
             await api.post('/financeiro/orcamentos', { categoria_id, mes: mesRef(), valor });
           } else {
-            await api.post('/financeiro/gastos', { categoria_id, mes: mesRef(), valor, descricao });
+            await api.post('/financeiro/gastos', { categoria_id, mes: mesRef(), valor, descricao, itens });
           }
           fecharOverlay();
           carregarTudo();
@@ -1910,3 +1926,49 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+
+// ---------- Notificações (sino fixo no canto superior direito) ----------
+let notificacoesAtuais = [];
+
+function criarSinoNotificacoes() {
+  if (document.getElementById('sino-notif')) return;
+  const btn = document.createElement('button');
+  btn.id = 'sino-notif';
+  btn.type = 'button';
+  btn.setAttribute('aria-label', 'Notificações');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 01-3.4 0"/></svg><span id="sino-notif-contador" class="oculto"></span>';
+  btn.addEventListener('click', abrirNotificacoes);
+  const shell = document.getElementById('app-shell');
+  shell.insertAdjacentElement('afterend', btn);
+}
+
+async function atualizarNotificacoes() {
+  const shell = document.getElementById('app-shell');
+  if (!shell || !shell.classList.contains('ativo')) return;
+  criarSinoNotificacoes();
+  try {
+    notificacoesAtuais = await api.get('/notificacoes');
+  } catch (e) {
+    return;
+  }
+  const cont = document.getElementById('sino-notif-contador');
+  cont.textContent = notificacoesAtuais.length;
+  cont.classList.toggle('oculto', notificacoesAtuais.length === 0);
+}
+
+function abrirNotificacoes() {
+  const corpo = notificacoesAtuais.length
+    ? `<div class="notif-lista">${notificacoesAtuais.map((n) => `
+        <button type="button" class="notif-item notif-${n.tipo}" data-destino="${esc(n.destino)}">
+          <strong>${esc(n.titulo)}</strong>
+          <span>${esc(n.texto)}</span>
+        </button>`).join('')}</div>`
+    : '<p class="card-item-meta">Nenhuma notificação no momento. Tudo em dia!</p>';
+  abrirOverlay('Notificações', corpo);
+  document.querySelectorAll('.notif-item').forEach((el) => {
+    el.addEventListener('click', () => { fecharOverlay(); navegarPara(el.dataset.destino); });
+  });
+}
+
+setInterval(atualizarNotificacoes, 60000);

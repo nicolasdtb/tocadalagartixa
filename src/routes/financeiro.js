@@ -90,7 +90,7 @@ router.post('/orcamentos', requireSocio, async (req, res) => {
 
 // Registrar gasto numa categoria específica
 router.post('/gastos', requireSocio, async (req, res) => {
-  const { categoria_id, mes, valor, descricao } = req.body;
+  const { categoria_id, mes, valor, descricao, itens } = req.body;
   if (!categoria_id || !mes || !valor) {
     return res.status(400).json({ erro: 'Campos obrigatórios: categoria_id, mes, valor' });
   }
@@ -103,9 +103,9 @@ router.post('/gastos', requireSocio, async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO tocadalagartixa.lancamentos_financeiros
-        (categoria_id, tipo_id, valor, mes_competencia, usuario_id, descricao)
-       VALUES ($1, 2, $2, $3, $4, $5) RETURNING *`,
-      [categoria_id, valor, mesCompetencia, req.session.usuario.id, descricao || null]
+        (categoria_id, tipo_id, valor, mes_competencia, usuario_id, descricao, itens)
+       VALUES ($1, 2, $2, $3, $4, $5, $6) RETURNING *`,
+      [categoria_id, valor, mesCompetencia, req.session.usuario.id, descricao || null, itens ? String(itens).slice(0, 1000) : null]
     );
     await registrar({
       usuarioId: req.session.usuario.id, modulo: 'financeiro', acao: 'gasto',
@@ -331,7 +331,7 @@ router.get("/lancamentos/:mes", requireSocio, async (req, res) => {
   const mesCompetencia = primeiroDiaMes(req.params.mes);
   try {
     const result = await pool.query(
-      `SELECT l.id, l.tipo_id, l.valor, l.descricao, l.created_at,
+      `SELECT l.id, l.tipo_id, l.valor, l.descricao, l.itens, l.created_at,
               c.nome AS categoria, u.nome AS usuario_nome
        FROM tocadalagartixa.lancamentos_financeiros l
        LEFT JOIN tocadalagartixa.categorias_financeiras c ON c.id = l.categoria_id
